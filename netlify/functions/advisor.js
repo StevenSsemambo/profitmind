@@ -127,9 +127,13 @@ exports.handler = async (event) => {
     attempts.push({ provider: "groq", key: groqKey, model: process.env.GROQ_FALLBACK_MODEL || "openai/gpt-oss-20b" });
   }
 
-  const result = await askProviders(attempts, system, turns, question.slice(0, 2000));
+  const failures = [];
+  const result = await askProviders(attempts, system, turns, question.slice(0, 2000), failures);
   if (result) return json(200, { text: result.text, provider: result.provider });
-  return json(200, { text: "The AI assistant is temporarily unavailable — try again in a moment. Everyday questions still work." });
+  return json(200, {
+    text: "The AI assistant is temporarily unavailable — try again in a moment. Everyday questions still work.",
+    ...(process.env.ADVISOR_DEBUG === "1" ? { debug: failures } : {}),
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -137,10 +141,13 @@ exports.handler = async (event) => {
 // ---------------------------------------------------------------------------
 
 // Netlify's default function timeout is 10 s, so the whole chain shares a
-// budget: the first (Gemini) attempt may use up to 5 s, later ones whatever
-// is left. Quick failures (429, 5xx, bad key) fall through immediately.
+// budget. Each provider gets a capped slice, and time is always held back for
+// the providers still waiting in the chain — a slow Gemini can no longer use
+// up the clock and leave Groq with nothing. Quick failures (429, 5xx, bad key)
+// fall through immediately.
 const TOTAL_BUDGET_MS = 9000;
-const FIRST_ATTEMPT_MS = 5000;
+const GEMINI_ATTEMPT_MS = 3500;   // cap for each Gemini attempt
+const GROQ_RESERVE_MS = 3500;     // always kept back for Groq while it is still to come
 const MIN_ATTEMPT_MS = 1500;
 
 async function fetchWithTimeout(url, init, ms) {
@@ -153,20 +160,32 @@ async function fetchWithTimeout(url, init, ms) {
   }
 }
 
-async function askProviders(attempts, system, turns, question) {
+async function askProviders(attempts, system, turns, question, failures = []) {
   const started = Date.now();
   for (let i = 0; i < attempts.length; i++) {
-    const remaining = TOTAL_BUDGET_MS - (Date.now() - started);
-    if (remaining < MIN_ATTEMPT_MS) break;
-    const budget = i === 0 ? Math.min(FIRST_ATTEMPT_MS, remaining) : remaining;
     const a = attempts[i];
+    const remaining = TOTAL_BUDGET_MS - (Date.now() - started);
+    const groqStillToCome = a.provider === "gemini" && attempts.slice(i + 1).some((x) => x.provider === "groq");
+    // Gemini is capped and must leave Groq's reserve untouched; Groq may use whatever is left.
+    const budget = a.provider === "gemini"
+      ? Math.min(GEMINI_ATTEMPT_MS, remaining - (groqStillToCome ? GROQ_RESERVE_MS : 0))
+      : remaining;
+    if (budget < MIN_ATTEMPT_MS) {
+      failures.push(`${a.provider}:${a.model} -> skipped (not enough time left)`);
+      continue;
+    }
     try {
       const text = a.provider === "gemini"
         ? await callGemini(a, system, turns, question, budget)
         : await callGroq(a, system, turns, question, budget);
       if (text) return { text, provider: `${a.provider}:${a.model}` };
-    } catch {
-      /* timeout, network error or provider error — try the next one */
+      failures.push(`${a.provider}:${a.model} -> returned no text`);
+      console.error(`[advisor] ${a.provider}:${a.model} returned no text`);
+    } catch (e) {
+      /* timeout, network error or provider error — log why, then try the next one */
+      const why = e && e.name === "AbortError" ? `timed out after ${Math.round(budget)}ms` : String((e && e.message) || e).slice(0, 400);
+      failures.push(`${a.provider}:${a.model} -> ${why}`);
+      console.error(`[advisor] ${a.provider}:${a.model} failed: ${why}`);
     }
   }
   return null;
@@ -200,10 +219,11 @@ async function callGemini({ key, model }, system, turns, question, budget) {
   if (res.status === 400 && budget - (Date.now() - t0) > MIN_ATTEMPT_MS) {
     res = await send(false, budget - (Date.now() - t0));
   }
-  if (!res.ok) throw new Error(`gemini ${res.status}`);
+  if (!res.ok) throw new Error(`gemini HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 300)}`);
   const data = await res.json();
   const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
   const text = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join("").trim();
+  if (!text) console.error(`[advisor] gemini ${model} empty: finishReason=${data.candidates && data.candidates[0] && data.candidates[0].finishReason} blockReason=${data.promptFeedback && data.promptFeedback.blockReason}`);
   return text || null;
 }
 
@@ -220,8 +240,9 @@ async function callGroq({ key, model }, system, turns, question, budget) {
       ...(isGptOss ? { reasoning_effort: "low" } : {}),
     }),
   }, budget);
-  if (!res.ok) throw new Error(`groq ${res.status}`);
+  if (!res.ok) throw new Error(`groq HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 300)}`);
   const data = await res.json();
   const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (!text) console.error(`[advisor] groq ${model} empty: finish_reason=${data.choices && data.choices[0] && data.choices[0].finish_reason}`);
   return text ? text.trim() : null;
 }
