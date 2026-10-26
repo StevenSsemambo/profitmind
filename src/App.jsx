@@ -39,6 +39,7 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState(SEED_PURCHASES);
   const [reportSettings, setReportSettings] = useState(DEFAULT_REPORT_SETTINGS);
+  const activeTabRef = useRef(null);
   const [shop, setShop] = useState({ name: "My Shop", setupDone: true });
   const [expenses, setExpenses] = useState([]);
   const [cashups, setCashups] = useState([]);
@@ -142,6 +143,13 @@ export default function App() {
     })();
   }, [products, sales, debtors, purchases, reportSettings, lastBackupAt, shop, expenses, cashups, adjustments, supplierPayments, loaded]);
 
+  // On a phone the tab bar scrolls sideways — keep the selected tab in view.
+  useEffect(() => {
+    if (activeTabRef.current && activeTabRef.current.scrollIntoView) {
+      activeTabRef.current.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    }
+  }, [tab, user]);
+
   // Voided sales stay on record (History) but never count in any total.
   const liveSales = useMemo(() => activeSales(sales), [sales]);
 
@@ -244,40 +252,51 @@ export default function App() {
     <div className="min-h-screen" style={{ background: C.paper, fontFamily: "'Inter', sans-serif" }}>
       <style>{FONT_IMPORT}</style>
       <div className="max-w-5xl mx-auto p-4 md:p-8">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full" style={{ background: C.gold }} />
-            <span className="w-2 h-2 rounded-full" style={{ background: C.green }} />
-            <span className="w-2 h-2 rounded-full" style={{ background: C.brick }} />
-            <h1 className="text-xl ml-1" style={{ fontFamily: "'Fraunces', serif", color: C.ink }}>{shop.name || "ProfitMind"}</h1>
+        <div className="flex items-center justify-between gap-3 mb-2 sm:mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex items-center gap-1 shrink-0">
+              <span className="w-2 h-2 rounded-full" style={{ background: C.gold }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: C.green }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: C.brick }} />
+            </span>
+            <h1
+              className="text-lg sm:text-xl ml-1 leading-tight min-w-0"
+              style={{ fontFamily: "'Fraunces', serif", color: C.ink, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }}
+              title={shop.name}
+            >
+              {shop.name || "ProfitMind"}
+            </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="text-right">
-              <p className="text-sm font-medium" style={{ color: C.ink }}>{user.name}</p>
-              <p className="text-[11px]" style={{ color: C.ink, opacity: 0.5 }}>{user.role === "admin" ? "Owner / Admin" : "Cashier"}</p>
+              <p className="text-sm font-medium leading-tight" style={{ color: C.ink }}>{user.name}</p>
+              <p className="hidden sm:block text-[11px]" style={{ color: C.ink, opacity: 0.5 }}>{user.role === "admin" ? "Owner / Admin" : "Cashier"}</p>
             </div>
             <button
               onClick={() => setUser(null)}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-2 sm:py-1.5 rounded-lg border"
               style={{ borderColor: C.line, color: C.ink }}
               title="Switch user"
+              aria-label="Switch user"
             >
-              <LogOut size={13} /> Switch
+              <LogOut size={14} /> <span className="hidden sm:inline">Switch</span>
             </button>
           </div>
         </div>
-        <p className="text-xs mb-6" style={{ color: C.ink, opacity: 0.5 }}>
+        <p className="hidden sm:block text-xs mb-6" style={{ color: C.ink, opacity: 0.5 }}>
           {user.role === "admin"
             ? "Signed in as Owner — full access, including everyday Sell/Debtors/Stock work at the till."
             : "Signed in as Cashier — till and stock access only. Analytics, Reports, Export & Backup and the Advisor are owner-only."}
         </p>
 
-        <div className="flex gap-1 mb-6 border-b overflow-x-auto" style={{ borderColor: C.line }}>
+        <div className="tab-scroll flex gap-1 mb-5 sm:mb-6 mt-3 sm:mt-0 border-b overflow-x-auto" style={{ borderColor: C.line }}>
           {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
+              ref={tab === id ? activeTabRef : null}
               onClick={() => setTab(id)}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm -mb-px border-b-2 whitespace-nowrap"
+              aria-current={tab === id ? "page" : undefined}
+              className="flex items-center gap-2 px-3 sm:px-4 py-3 sm:py-2.5 text-sm -mb-px border-b-2 whitespace-nowrap shrink-0"
               style={{
                 borderColor: tab === id ? C.goldDark : "transparent",
                 color: tab === id ? C.ink : "rgba(30,42,31,0.5)",

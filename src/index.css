@@ -11,3 +11,64 @@ html, body, #root {
 body {
   margin: 0;
 }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iPhones zoom the whole page when a field under 16px is tapped, which
+   shoves the layout sideways. Keep fields at 16px on phones. */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Wide tables scroll sideways inside their card instead of being cut off. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.table-scroll > table {
+  min-width: var(--table-min, 640px);
+}
+.table-scroll .sticky-cell {
+  white-space: normal;
+  max-width: 11rem;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #F7F8F2;
+  box-shadow: 1px 0 0 rgba(30, 42, 31, 0.08);
+}
+
+/* Tab bar: no visible scrollbar, snaps nicely under a thumb. */
+.tab-scroll {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Keep amounts, dates and short labels on one line inside scrolling tables;
+   the expanded "history" row (colspan) is allowed to wrap as normal text. */
+.table-scroll th,
+.table-scroll td {
+  white-space: nowrap;
+}
+.table-scroll td[colspan] {
+  white-space: normal;
+}
+
+.table-scroll th.sticky-cell,
+.table-scroll td.sticky-cell {
+  white-space: normal;
+}
+
+/* Pinned header cell takes the colour of its own header row. */
+.table-scroll th.sticky-cell {
+  background: inherit;
+}

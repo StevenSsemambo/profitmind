@@ -6,7 +6,7 @@ import { newId } from "../lib/ids.js";
 import { useState, useEffect } from "react";
 import { PackagePlus, Plus, Pencil, Trash2, SlidersHorizontal, Upload } from "lucide-react";
 import { C, ugx, fmtDate } from "../lib/theme.js";
-import { Card, Field, Modal, EmptyState, inputStyle } from "./ui/primitives.jsx";
+import { Card, Field, Modal, EmptyState, inputStyle, TableScroll } from "./ui/primitives.jsx";
 import { applyRestock, applyAdjustment, ADJUST_REASONS } from "../lib/stock.js";
 import { parseProductsCsv, IMPORT_TEMPLATE } from "../lib/importProducts.js";
 import { startOfDay } from "../lib/finance.js";
@@ -194,10 +194,10 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
         {recentPurchases.length === 0 ? (
           <EmptyState text="No stock purchases recorded yet." />
         ) : (
-          <table className="w-full text-sm">
+          <TableScroll min={560}><table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide" style={{ background: C.paper, color: C.ink, opacity: 0.5 }}>
-                <th className="px-4 py-2">Date</th>
+                <th className="px-4 py-2 sticky-cell">Date</th>
                 <th className="px-4 py-2">Product</th>
                 <th className="px-4 py-2">Supplier</th>
                 <th className="px-4 py-2 text-right">Qty</th>
@@ -217,15 +217,15 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></TableScroll>
         )}
       </Card>
 
       {isAdmin && (
         <>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <h3 className="font-medium" style={{ color: C.ink }}>Products</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowNewProduct(true)}
               className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border"
@@ -241,10 +241,10 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
             </div>
           </div>
           <Card className="overflow-hidden">
-            <table className="w-full text-sm">
+            <TableScroll min={560}><table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide" style={{ background: C.paper, color: C.ink, opacity: 0.5 }}>
-                  <th className="px-4 py-2">Name</th>
+                  <th className="px-4 py-2 sticky-cell">Name</th>
                   <th className="px-4 py-2">Category</th>
                   <th className="px-4 py-2 text-right">Cost</th>
                   <th className="px-4 py-2 text-right">Sell</th>
@@ -255,7 +255,7 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
               <tbody>
                 {products.map((p) => (
                   <tr key={p.id} className="border-t" style={{ borderColor: C.line }}>
-                    <td className="px-4 py-2 font-medium" style={{ color: C.ink }}>
+                    <td className="px-4 py-2 font-medium sticky-cell" style={{ color: C.ink }}>
                       {p.name}
                       {p.expiryDate && p.stock > 0 && (() => {
                         const days = Math.round((startOfDay(p.expiryDate) - startOfDay(Date.now())) / 86400000);
@@ -287,7 +287,7 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></TableScroll>
           </Card>
         </>
       )}

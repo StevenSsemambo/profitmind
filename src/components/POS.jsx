@@ -2,7 +2,7 @@
 /* POS — the till. Cart, stock-capped quantities, cash/momo/credit      */
 /* checkout, and a shareable receipt.                                   */
 /* ------------------------------------------------------------------ */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Search, Plus, Minus, Trash2, Receipt, Share2, Phone } from "lucide-react";
 import { C } from "../lib/theme.js";
 import { ugx } from "../lib/theme.js";
@@ -62,6 +62,18 @@ export default function POS({ products, debtors, setDebtors, onCompleteSale, rol
 
   const total = cart.reduce((s, i) => s + i.sellPrice * i.qty, 0);
 
+  // On a phone the sale sits below the product list; a floating bar jumps to it
+  // and disappears once the sale is on screen.
+  const cartRef = useRef(null);
+  const [cartVisible, setCartVisible] = useState(false);
+  useEffect(() => {
+    const el = cartRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setCartVisible(entry.isIntersecting), { threshold: 0.15 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   function addNewDebtor() {
     if (!newDebtorName.trim()) return;
     const id = newId();
@@ -108,7 +120,18 @@ export default function POS({ products, debtors, setDebtors, onCompleteSale, rol
 
   return (
     <div className="grid md:grid-cols-5 gap-6">
-      <div className="md:col-span-3">
+      {cart.length > 0 && !cartVisible && (
+        <button
+          type="button"
+          onClick={() => cartRef.current && cartRef.current.scrollIntoView({ behavior: "smooth", block: "start" })}
+          className="md:hidden fixed left-4 right-4 z-40 flex items-center justify-between rounded-xl px-4 py-3 text-white shadow-lg"
+          style={{ background: C.greenDark, bottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        >
+          <span className="text-sm">{cart.reduce((n, i) => n + i.qty, 0)} item(s) · View sale ↓</span>
+          <span className="text-sm" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{ugx(total)}</span>
+        </button>
+      )}
+      <div className="md:col-span-3 min-w-0">
         <div className="relative mb-4">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: C.ink, opacity: 0.4 }} />
           <input
@@ -140,7 +163,7 @@ export default function POS({ products, debtors, setDebtors, onCompleteSale, rol
         </div>
       </div>
 
-      <div className="md:col-span-2">
+      <div className="md:col-span-2 min-w-0" ref={cartRef}>
         <Card className="p-4 mb-4">
           <h3 className="font-medium mb-3" style={{ color: C.ink }}>Current sale</h3>
           {cart.length === 0 && <p className="text-sm" style={{ color: C.ink, opacity: 0.5 }}>No items yet — tap a product to add it.</p>}
@@ -152,8 +175,8 @@ export default function POS({ products, debtors, setDebtors, onCompleteSale, rol
               return (
                 <div key={i.productId}>
                   <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="flex-1 truncate" style={{ color: C.ink }}>{i.name}</span>
-                    <div className="flex items-center gap-1">
+                    <span className="flex-1 min-w-0 break-words leading-tight" style={{ color: C.ink }}>{i.name}</span>
+                    <div className="flex items-center gap-1 shrink-0">
                       <button onClick={() => changeQty(i.productId, -1)} className="p-1 rounded hover:bg-black/5"><Minus size={14} /></button>
                       <span className="w-5 text-center" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{i.qty}</span>
                       <button

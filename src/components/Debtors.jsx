@@ -5,7 +5,7 @@
 import { useState, useMemo, Fragment } from "react";
 import { ChevronDown, ChevronUp, Phone, Search, UserPlus, Pencil, Trash2, CalendarClock } from "lucide-react";
 import { C, ugx, fmtDate } from "../lib/theme.js";
-import { Card, Field, Modal, EmptyState, inputStyle } from "./ui/primitives.jsx";
+import { Card, Field, Modal, EmptyState, inputStyle, TableScroll } from "./ui/primitives.jsx";
 import { applyDebtorPayment } from "../lib/sales.js";
 import { newId } from "../lib/ids.js";
 
@@ -89,14 +89,14 @@ export default function Debtors({ debtors, setDebtors, role }) {
         />
       </div>
       <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+        <TableScroll min={720}><table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide" style={{ background: C.paperRaised, color: C.ink, opacity: 0.5 }}>
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Phone</th>
+              <th className="px-4 py-3 sticky-cell">Customer</th>
+              <th className="px-4 py-3 text-right">Balance</th>
               <th className="px-4 py-3 text-right">Owed</th>
               <th className="px-4 py-3 text-right">Paid</th>
-              <th className="px-4 py-3 text-right">Balance</th>
+              <th className="px-4 py-3">Phone</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -108,7 +108,7 @@ export default function Debtors({ debtors, setDebtors, role }) {
               return (
                 <Fragment key={d.id}>
                   <tr className="border-t" style={{ borderColor: C.line }}>
-                    <td className="px-4 py-3 font-medium" style={{ color: C.ink }}>
+                    <td className="px-4 py-3 font-medium sticky-cell" style={{ color: C.ink }}>
                       <button onClick={() => setExpanded(isOpen ? null : d.id)} className="flex items-center gap-1.5">
                         {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {d.name}
                       </button>
@@ -122,13 +122,13 @@ export default function Debtors({ debtors, setDebtors, role }) {
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3" style={{ color: C.ink, opacity: 0.6 }}>
-                      {d.phone ? <span className="inline-flex items-center gap-1"><Phone size={12} />{d.phone}</span> : "—"}
+                    <td className="px-4 py-3 text-right font-medium" style={{ fontFamily: "'IBM Plex Mono', monospace", color: balance > 0 ? C.brick : balance < 0 ? C.greenDark : C.ink }}>
+                      {balance > 0 ? ugx(balance) : balance < 0 ? `Credit ${ugx(-balance)}` : "Settled"}
                     </td>
                     <td className="px-4 py-3 text-right" style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.ink, opacity: 0.6 }}>{ugx(d.owed)}</td>
                     <td className="px-4 py-3 text-right" style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.ink, opacity: 0.6 }}>{ugx(d.paid)}</td>
-                    <td className="px-4 py-3 text-right font-medium" style={{ fontFamily: "'IBM Plex Mono', monospace", color: balance > 0 ? C.brick : balance < 0 ? C.greenDark : C.ink }}>
-                      {balance > 0 ? ugx(balance) : balance < 0 ? `Credit ${ugx(-balance)}` : "Settled"}
+                    <td className="px-4 py-3" style={{ color: C.ink, opacity: 0.6 }}>
+                      {d.phone ? <span className="inline-flex items-center gap-1"><Phone size={12} />{d.phone}</span> : "—"}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button
@@ -185,7 +185,7 @@ export default function Debtors({ debtors, setDebtors, role }) {
               <tr><td colSpan={6}><EmptyState text={`No customers match "${query}".`} /></td></tr>
             )}
           </tbody>
-        </table>
+        </table></TableScroll>
       </Card>
 
       {payFor && (

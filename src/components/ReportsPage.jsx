@@ -17,7 +17,7 @@ const REPORT_PERIODS = [
 
 function ReportKPI({ label, value }) {
   return (
-    <div className="flex-1 rounded-lg border p-3" style={{ borderColor: C.line, background: C.paperRaised }}>
+    <div className="min-w-0 rounded-lg border p-3" style={{ borderColor: C.line, background: C.paperRaised }}>
       <p className="text-[10px] uppercase tracking-wide" style={{ color: C.ink, opacity: 0.5 }}>{label}</p>
       <p className="text-base font-semibold mt-1" style={{ color: C.ink, fontFamily: "'IBM Plex Mono', monospace" }}>{value}</p>
     </div>
@@ -114,7 +114,7 @@ export default function ReportsPage({ products, sales, debtors, purchases, expen
         </div>
         <p className="text-xs mb-4" style={{ color: C.green }}>{changeTxt}</p>
 
-        <div className="flex gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
           <ReportKPI label="Revenue" value={ugx(report.revenue)} />
           <ReportKPI label="Gross profit" value={ugx(report.grossProfit)} />
           <ReportKPI label="Net profit" value={report.hasExpenses || report.stockLoss > 0 ? ugx(report.netProfit) : "—"} />
@@ -160,17 +160,17 @@ export default function ReportsPage({ products, sales, debtors, purchases, expen
           Send it to your own WhatsApp (or forward it to a manager), or save it as a PDF for your records.
         </p>
         <div className="flex items-center gap-2 mb-3">
-          <div className="flex items-center gap-2 flex-1 rounded-lg border px-3 py-2" style={{ borderColor: C.line }}>
+          <div className="flex items-center gap-2 flex-1 min-w-0 rounded-lg border px-3 py-2" style={{ borderColor: C.line }}>
             <Phone size={14} style={{ color: C.ink, opacity: 0.4 }} />
             <input
               value={phoneDraft}
               onChange={(e) => setPhoneDraft(e.target.value)}
               placeholder="e.g. 2567xxxxxxxx"
-              className="flex-1 bg-transparent outline-none text-sm"
+              className="flex-1 min-w-0 bg-transparent outline-none text-sm"
               style={{ color: C.ink }}
             />
           </div>
-          <button onClick={savePhone} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.line, color: C.ink }}>
+          <button onClick={savePhone} className="text-xs px-3 py-2 rounded-lg border shrink-0" style={{ borderColor: C.line, color: C.ink }}>
             Save
           </button>
         </div>

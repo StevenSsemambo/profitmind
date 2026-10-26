@@ -36,12 +36,27 @@ export function inputStyle() {
   };
 }
 
+// Wraps a wide table so it scrolls sideways inside its card (never cut off),
+// with a hint on phones. Put it directly around the <table>.
+export function TableScroll({ children, min = 640 }) {
+  return (
+    <>
+      <div className="table-scroll" style={{ "--table-min": `${min}px` }}>{children}</div>
+      <p className="sm:hidden text-[11px] px-4 py-2 border-t text-center" style={{ borderColor: C.line, color: C.ink, opacity: 0.5 }}>
+        Swipe sideways to see all columns →
+      </p>
+    </>
+  );
+}
+
+// On phones the dialog is a full-width sheet from the bottom that stays above
+// the keyboard (dvh), on larger screens a centred card.
 export function Modal({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50" onClick={onClose}>
       <div
-        className="rounded-2xl p-6 w-full max-w-sm max-h-[85vh] overflow-y-auto"
-        style={{ background: C.paperRaised }}
+        className="rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 w-full sm:max-w-sm max-h-[92vh] sm:max-h-[85vh] overflow-y-auto"
+        style={{ background: C.paperRaised, maxHeight: "min(92dvh, 92vh)", paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

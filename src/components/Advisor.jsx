@@ -108,7 +108,7 @@ export default function Advisor({ products, sales, debtors, purchases, extras = 
         @keyframes pm-mic-pulse { 0% { box-shadow: 0 0 0 0 rgba(178,58,46,0.45); } 70% { box-shadow: 0 0 0 12px rgba(178,58,46,0); } 100% { box-shadow: 0 0 0 0 rgba(178,58,46,0); } }
         @keyframes pm-bar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
       `}</style>
-      <div className="flex items-start justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-3 mb-6">
         <p className="text-sm" style={{ color: C.ink, opacity: 0.6 }}>
           Everyday questions — sales, stock, debtors, prices, suppliers — are answered instantly from this shop's own data, even offline.
           Anything else is handed to the AI assistant, grounded in the same numbers{voice.speechSupported ? " — or just talk to it." : "."}
@@ -142,12 +142,12 @@ export default function Advisor({ products, sales, debtors, purchases, extras = 
       <Briefing products={products} sales={sales} debtors={debtors} purchases={purchases} onConfirmReorder={onConfirmReorder} />
       <Card className="p-4 mb-4" style={{ minHeight: "160px" }}>
         {thread.length === 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 overflow-x-auto md:flex-wrap md:overflow-visible pb-2 -mx-1 px-1 tab-scroll">
             {SUGGESTIONS.map((s) => (
               <button
                 key={s}
                 onClick={() => ask(s)}
-                className="text-xs px-3 py-1.5 rounded-full border"
+                className="text-xs px-3 py-2 rounded-full border shrink-0 whitespace-nowrap"
                 style={{ borderColor: C.line, color: C.ink }}
               >
                 {s}

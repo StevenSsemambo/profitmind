@@ -15,9 +15,9 @@ const METHODS = [{ id: "cash", label: "Cash" }, { id: "momo", label: "Mobile mon
 
 function Row({ label, value, sign, bold }) {
   return (
-    <div className="flex justify-between text-sm py-0.5" style={{ color: C.ink, fontWeight: bold ? 600 : 400 }}>
-      <span style={{ opacity: bold ? 1 : 0.65 }}>{sign ? `${sign} ` : ""}{label}</span>
-      <span style={mono}>{ugx(value)}</span>
+    <div className="flex justify-between gap-3 text-sm py-0.5" style={{ color: C.ink, fontWeight: bold ? 600 : 400 }}>
+      <span className="min-w-0" style={{ opacity: bold ? 1 : 0.65 }}>{sign ? `${sign} ` : ""}{label}</span>
+      <span className="whitespace-nowrap shrink-0" style={mono}>{ugx(value)}</span>
     </div>
   );
 }
