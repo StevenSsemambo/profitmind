@@ -125,11 +125,24 @@ export function sendDigestWhatsApp(report, shopName, phone) {
 // tab and triggers the browser's print dialog, where "Save as PDF" is
 // a built-in destination on iOS, Android, Windows and macOS alike —
 // so this is a genuine on-device PDF export with no extra library.
-export function printPeriodReport(report, shopName) {
+// Everything the user typed (shop, product, category, debtor names) must be
+// escaped before it goes into the generated HTML page.
+export function escapeHtml(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function printPeriodReport(report, shopNameRaw) {
   const win = window.open("", "_blank");
   if (!win) return;
-  const row = (label, value) => `<tr><td>${label}</td><td style="text-align:right">${value}</td></tr>`;
-  const section = (title, bodyHtml) => (bodyHtml ? `<h2>${title}</h2>${bodyHtml}` : "");
+  const shopName = escapeHtml(shopNameRaw);
+  const e = escapeHtml;
+  const row = (label, value) => `<tr><td>${e(label)}</td><td style="text-align:right">${e(value)}</td></tr>`;
+  const section = (title, bodyHtml) => (bodyHtml ? `<h2>${e(title)}</h2>${bodyHtml}` : "");
 
   const topProductsRows = report.topProducts.map((p) => row(p.name, `${p.units} unit(s) · ${ugx(p.revenue)}`)).join("");
   const reorderRows = report.reorderDrafts.slice(0, 8).map((p) => row(p.name, p.daysLeft !== null ? `~${Math.round(p.daysLeft)}d left · reorder ${p.suggestedQty}` : `reorder ${p.suggestedQty}`)).join("");
@@ -137,7 +150,7 @@ export function printPeriodReport(report, shopName) {
   const categoryRows = report.categories.map((c) => row(c.category, ugx(c.revenue))).join("");
   const changeTxt = report.changePct === null ? `No prior ${report.compareLabel === "last week" ? "week" : report.compareLabel === "last month" ? "month" : "day"} to compare.` : `${report.changePct >= 0 ? "Up" : "Down"} ${Math.abs(report.changePct).toFixed(1)}% vs ${report.compareLabel}.`;
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${shopName} — ${report.periodTitle} Report</title>
+  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${shopName} — ${e(report.periodTitle)} Report</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: Georgia, 'Times New Roman', serif; color: #1E2A1F; margin: 0; padding: 36px; max-width: 760px; }
@@ -164,14 +177,14 @@ export function printPeriodReport(report, shopName) {
     <span class="dot" style="background:#B4483A"></span>
   </div>
   <h1>${shopName}</h1>
-  <div class="sub">${report.periodTitle} Report · ${report.rangeLabel}</div>
+  <div class="sub">${e(report.periodTitle)} Report · ${e(report.rangeLabel)}</div>
 
   <div class="kpis">
-    <div class="kpi"><div class="label">Revenue</div><div class="value">${ugx(report.revenue)}</div></div>
-    <div class="kpi"><div class="label">Net Profit</div><div class="value">${ugx(report.profit)}</div></div>
-    <div class="kpi"><div class="label">Sales</div><div class="value">${report.salesCount}</div></div>
+    <div class="kpi"><div class="label">Revenue</div><div class="value">${e(ugx(report.revenue))}</div></div>
+    <div class="kpi"><div class="label">Net Profit</div><div class="value">${e(ugx(report.profit))}</div></div>
+    <div class="kpi"><div class="label">Sales</div><div class="value">${e(report.salesCount)}</div></div>
   </div>
-  <div class="change">${changeTxt}</div>
+  <div class="change">${e(changeTxt)}</div>
 
   ${section("Top Sellers", topProductsRows ? `<table>${topProductsRows}</table>` : `<p class="empty">No sales recorded in this period.</p>`)}
   ${section("Revenue by Category", categoryRows ? `<table>${categoryRows}</table>` : "")}

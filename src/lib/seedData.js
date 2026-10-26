@@ -56,10 +56,9 @@ export const TABS = [
 
 export const DEFAULT_REPORT_SETTINGS = { whatsappNumber: "", autoWeekly: true, autoMonthly: true, lastWeeklySent: null, lastMonthlySent: null, notificationsEnabled: false };
 
-// Demo login only — this skips a real PIN pad so reviewers can see what
-// each role can do in one tap. Swap for real authentication before this
-// ever holds a real shop's data (see README "Before this is a real product").
+// Roles shown on the login screen. PINs are chosen by the shop on first
+// launch and stored hashed (see lib/auth.js) — none are hard-coded here.
 export const ACCOUNTS = [
-  { name: "Owner", role: "admin", pin: "1234", desc: "Full access — Sell, Debtors, Stock, Analytics, Export & Backup, Advisor." },
-  { name: "Cashier", role: "cashier", pin: "0000", desc: "Till & stock only — Sell, Debtors and Stock. No access to Analytics, exports, or the Advisor." },
+  { name: "Owner", role: "admin", desc: "Full access — Sell, Debtors, Stock, Analytics, Export & Backup, Advisor." },
+  { name: "Cashier", role: "cashier", desc: "Till & stock only — Sell, Debtors and Stock. No access to Analytics, exports, or the Advisor." },
 ];

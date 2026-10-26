@@ -7,8 +7,9 @@ import { Download, FileSpreadsheet, RotateCcw } from "lucide-react";
 import { C } from "../lib/theme.js";
 import { Card } from "./ui/primitives.jsx";
 import { downloadCSV } from "../lib/csv.js";
+import SecurityCard from "./SecurityCard.jsx";
 
-export default function ExportPage({ products, sales, debtors, purchases, onReset }) {
+export default function ExportPage({ products, sales, debtors, purchases, onReset, onBackedUp }) {
   const [note, setNote] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -56,6 +57,7 @@ export default function ExportPage({ products, sales, debtors, purchases, onRese
     a.remove();
     URL.revokeObjectURL(url);
     setNote("Full backup downloaded.");
+    if (onBackedUp) onBackedUp();
   }
 
   const rows = [
@@ -100,10 +102,12 @@ export default function ExportPage({ products, sales, debtors, purchases, onRese
       </Card>
       {note && <p className="text-xs mb-6" style={{ color: C.ink, opacity: 0.6 }}>{note}</p>}
 
+      <SecurityCard />
+
       <Card className="p-5" style={{ borderColor: C.brick }}>
-        <h3 className="font-medium mb-1" style={{ color: C.ink }}>Reset demo data</h3>
+        <h3 className="font-medium mb-1" style={{ color: C.ink }}>Reset shop data</h3>
         <p className="text-xs mb-4" style={{ color: C.ink, opacity: 0.5 }}>
-          Wipes everything stored on this device and starts over from the seed data shown in this demo. This cannot be undone.
+          Wipes products, sales, debtors and purchases on this device and starts over from the sample data. Your PINs are kept. This cannot be undone — download a full backup first.
         </p>
         {confirmReset ? (
           <div className="flex gap-2">

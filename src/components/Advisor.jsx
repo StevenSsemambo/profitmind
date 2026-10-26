@@ -5,8 +5,9 @@
 /* See netlify/functions/advisor.js for the server side of this call.    */
 /* ------------------------------------------------------------------ */
 import { useState, useEffect, useRef } from "react";
-import { Mic, Send, Volume2, VolumeX } from "lucide-react";
+import { Mic, Send, Volume2, VolumeX, KeyRound } from "lucide-react";
 import { C } from "../lib/theme.js";
+import { storage } from "../lib/storage.js";
 import { ruleBasedAnswer, buildDigest, offlineFallbackAnswer, SUGGESTIONS } from "../lib/advisorEngine.js";
 import { Card, inputStyle } from "./ui/primitives.jsx";
 import Briefing from "./Briefing.jsx";
@@ -19,6 +20,30 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
   const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(true);
   const voice = useVoice();
   const prevThreadLen = useRef(0);
+  // The AI part of the Advisor is protected by an access code (set as
+  // ADVISOR_ACCESS_CODE in Netlify). It's entered once and kept on this device.
+  const [accessCode, setAccessCode] = useState("");
+  const [needCode, setNeedCode] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const pendingQuestion = useRef("");
+
+  useEffect(() => {
+    storage.get("advisor-code").then((r) => { if (r && r.value) setAccessCode(r.value); });
+  }, []);
+
+  async function saveCode() {
+    const code = codeInput.trim();
+    if (!code) return;
+    await storage.set("advisor-code", code);
+    setAccessCode(code);
+    setCodeInput("");
+    setNeedCode(false);
+    if (pendingQuestion.current) {
+      const q = pendingQuestion.current;
+      pendingQuestion.current = "";
+      ask(q, { retry: true, code });
+    }
+  }
 
   // Speak each new AI reply aloud (if voice replies are on) — works the
   // same whether the reply came from a rule, the API, or a typed question.
@@ -33,9 +58,9 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread]);
 
-  async function ask(q) {
+  async function ask(q, opts = {}) {
     if (!q.trim()) return;
-    setThread((t) => [...t, { role: "user", text: q }]);
+    if (!opts.retry) setThread((t) => [...t, { role: "user", text: q }]);
     setQuestion("");
     setThinking(true);
 
@@ -70,9 +95,19 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
       }));
       const res = await fetch("/.netlify/functions/advisor", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-advisor-code": opts.code || accessCode },
         body: JSON.stringify({ digest, priorTurns, question: q }),
       });
+      if (res.status === 401) {
+        pendingQuestion.current = q;
+        setNeedCode(true);
+        setThread((t) => [...t, { role: "ai", source: "data", text: accessCode || opts.code ? "That access code wasn't accepted. Enter the code from your Netlify settings (ADVISOR_ACCESS_CODE) to use the AI." : "To use the AI part of the Advisor, enter your access code below. Everyday questions don't need it." }]);
+        return;
+      }
+      if (res.status === 429) {
+        setThread((t) => [...t, { role: "ai", source: "data", text: "You're asking a lot very quickly — wait a few minutes and try again. Everyday questions still work instantly." }]);
+        return;
+      }
       if (!res.ok) throw new Error("advisor function error");
       const data = await res.json();
       const text = (data && data.text) || "I couldn't work out an answer to that.";
@@ -182,6 +217,23 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
             <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: C.brick }} />
           </span>
           <span style={{ opacity: voice.interim ? 1 : 0.5 }}>{voice.interim || "Listening…"}</span>
+        </div>
+      )}
+      {needCode && (
+        <div className="mb-2 flex items-center gap-2">
+          <KeyRound size={16} style={{ color: C.goldDark }} className="shrink-0" />
+          <input
+            type="password"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveCode(); } }}
+            placeholder="Advisor access code"
+            autoComplete="off"
+            style={inputStyle()}
+          />
+          <button type="button" onClick={saveCode} disabled={!codeInput.trim()} className="shrink-0 text-sm px-3 py-2 rounded-lg text-white disabled:opacity-40" style={{ background: C.greenDark }}>
+            Save
+          </button>
         </div>
       )}
       <div className="flex items-center gap-2">

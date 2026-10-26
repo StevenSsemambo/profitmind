@@ -3,11 +3,13 @@
 /* and the weekly/monthly report due-check (banner + browser            */
 /* notification).                                                       */
 /* ------------------------------------------------------------------ */
-import { useState, useEffect, useRef } from "react";
-import { Bell, LogOut, X } from "lucide-react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { Bell, LogOut, X, AlertTriangle, DatabaseBackup } from "lucide-react";
 import { C, FONT_IMPORT } from "./lib/theme.js";
 import { storage, STORAGE_KEY } from "./lib/storage.js";
 import { computeReportDue } from "./lib/reports.js";
+import { applySale } from "./lib/sales.js";
+import { newId } from "./lib/ids.js";
 import { SEED_PRODUCTS, SEED_DEBTORS, SEED_PURCHASES, TABS, DEFAULT_REPORT_SETTINGS } from "./lib/seedData.js";
 
 import Splash from "./components/Splash.jsx";
@@ -15,10 +17,14 @@ import Login from "./components/Login.jsx";
 import POS from "./components/POS.jsx";
 import Debtors from "./components/Debtors.jsx";
 import StockPage from "./components/StockPage.jsx";
-import AnalyticsPage from "./components/AnalyticsPage.jsx";
-import ReportsPage from "./components/ReportsPage.jsx";
-import ExportPage from "./components/ExportPage.jsx";
-import Advisor from "./components/Advisor.jsx";
+// Owner-only pages are split into their own chunks (recharts is the big one),
+// so the till loads fast on slow mobile connections.
+const AnalyticsPage = lazy(() => import("./components/AnalyticsPage.jsx"));
+const ReportsPage = lazy(() => import("./components/ReportsPage.jsx"));
+const ExportPage = lazy(() => import("./components/ExportPage.jsx"));
+const Advisor = lazy(() => import("./components/Advisor.jsx"));
+
+const BACKUP_REMINDER_DAYS = 7;
 
 export default function App() {
   const [user, setUser] = useState(null); // { name, role }
@@ -28,7 +34,10 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState(SEED_PURCHASES);
   const [reportSettings, setReportSettings] = useState(DEFAULT_REPORT_SETTINGS);
+  const [lastBackupAt, setLastBackupAt] = useState(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [dismissedBanner, setDismissedBanner] = useState(false);
+  const [dismissedBackup, setDismissedBackup] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [booting, setBooting] = useState(true);
   const notifiedRef = useRef({ weekly: false, monthly: false });
@@ -89,6 +98,7 @@ export default function App() {
           if (parsed.debtors) setDebtors(parsed.debtors);
           if (parsed.purchases) setPurchases(parsed.purchases);
           if (parsed.reportSettings) setReportSettings({ ...DEFAULT_REPORT_SETTINGS, ...parsed.reportSettings });
+          if (parsed.lastBackupAt) setLastBackupAt(parsed.lastBackupAt);
         }
       } catch (e) {
         // No saved data yet, or storage unavailable — fall back to seed data.
@@ -104,23 +114,22 @@ export default function App() {
     if (!loaded) return;
     (async () => {
       try {
-        await storage.set(STORAGE_KEY, JSON.stringify({ products, sales, debtors, purchases, reportSettings }));
+        const ok = await storage.set(STORAGE_KEY, JSON.stringify({ products, sales, debtors, purchases, reportSettings, lastBackupAt }));
+        setSaveFailed(!ok); // storage.set returns null when the browser refuses (full / blocked)
       } catch (e) {
-        // Storage save failed silently — data still lives in memory for this session.
+        setSaveFailed(true);
       }
     })();
-  }, [products, sales, debtors, purchases, reportSettings, loaded]);
+  }, [products, sales, debtors, purchases, reportSettings, lastBackupAt, loaded]);
 
-  function addSale(sale) {
-    setSales((s) => [...s, { id: Date.now() + Math.random(), ...sale }]);
-  }
-  function addCreditSale(debtorId, saleTotal, paidNow = 0) {
-    setDebtors((ds) => ds.map((d) => {
-      if (d.id !== debtorId) return d;
-      const history = [...(d.history || []), { type: "credit-sale", amount: saleTotal, date: Date.now() }];
-      if (paidNow > 0) history.push({ type: "payment", amount: paidNow, date: Date.now(), note: "Paid at time of sale" });
-      return { ...d, owed: d.owed + saleTotal, paid: d.paid + paidNow, history };
-    }));
+  // One checkout = one validated, atomic update of stock + debtor + sales log.
+  function completeSale({ cart, paymentMethod, debtorId, amountNow }) {
+    const result = applySale({ products, debtors, cart, paymentMethod, debtorId, amountNow });
+    if (!result.ok) return result;
+    setProducts(result.products);
+    setDebtors(result.debtors);
+    setSales((s) => [...s, result.sale]);
+    return result;
   }
   // Used by the Advisor's proactive reorder drafts — logs a purchase and
   // bumps stock in one step, the same way a manual restock in Stock does.
@@ -131,7 +140,7 @@ export default function App() {
     setProducts((ps) => ps.map((x) => (x.id === productId ? { ...x, stock: x.stock + qty } : x)));
     setPurchases((ps) => [
       ...ps,
-      { id: Date.now() + Math.random(), productId, productName: p.name, qty, costPricePerUnit: cost, totalCost: cost * qty, supplier: supplier || "", date: Date.now() },
+      { id: newId(), productId, productName: p.name, qty, costPricePerUnit: cost, totalCost: cost * qty, supplier: supplier || "", date: Date.now() },
     ]);
   }
 
@@ -141,6 +150,7 @@ export default function App() {
     setSales([]);
     setPurchases(SEED_PURCHASES);
     setReportSettings(DEFAULT_REPORT_SETTINGS);
+    setLastBackupAt(null);
     try {
       await storage.delete(STORAGE_KEY);
     } catch (e) { /* ignore */ }
@@ -164,6 +174,8 @@ export default function App() {
   const weeklyDue = user.role === "admin" && dueFlags.weeklyDue;
   const monthlyDue = user.role === "admin" && dueFlags.monthlyDue;
   const bannerPeriod = weeklyDue ? "week" : monthlyDue ? "month" : null;
+  const backupAgeDays = lastBackupAt ? (Date.now() - lastBackupAt) / 86400000 : Infinity;
+  const backupOverdue = user.role === "admin" && sales.length > 0 && backupAgeDays >= BACKUP_REMINDER_DAYS;
 
   return (
     <div className="min-h-screen" style={{ background: C.paper, fontFamily: "'Inter', sans-serif" }}>
@@ -214,6 +226,30 @@ export default function App() {
           ))}
         </div>
 
+        {saveFailed && (
+          <div className="flex items-center gap-2 rounded-lg border px-4 py-3 mb-5" style={{ borderColor: C.brick, background: "rgba(178,58,46,0.08)" }}>
+            <AlertTriangle size={16} style={{ color: C.brick, flexShrink: 0 }} />
+            <p className="text-xs" style={{ color: C.ink }}>
+              This device couldn't save your latest changes (storage may be full or blocked). Don't close the app — ask the owner to download a backup now.
+            </p>
+          </div>
+        )}
+
+        {backupOverdue && !dismissedBackup && tab !== "export" && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3 mb-5" style={{ borderColor: C.goldDark, background: "rgba(217,164,65,0.12)" }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <DatabaseBackup size={16} style={{ color: C.goldDark, flexShrink: 0 }} />
+              <p className="text-xs" style={{ color: C.ink }}>
+                {lastBackupAt ? `Your last backup was ${Math.floor(backupAgeDays)} days ago.` : "You haven't made a backup yet."} Your records only live on this phone.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={() => setTab("export")} className="text-xs px-3 py-1.5 rounded-lg text-white" style={{ background: C.greenDark }}>Back up now</button>
+              <button onClick={() => setDismissedBackup(true)} className="p-1" style={{ color: C.ink, opacity: 0.4 }}><X size={14} /></button>
+            </div>
+          </div>
+        )}
+
         {bannerPeriod && !dismissedBanner && tab !== "reports" && (
           <div
             className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3 mb-5"
@@ -241,12 +277,13 @@ export default function App() {
         )}
 
         {tab === "pos" && (
-          <POS products={products} setProducts={setProducts} debtors={debtors} setDebtors={setDebtors} addCreditSale={addCreditSale} addSale={addSale} />
+          <POS products={products} debtors={debtors} setDebtors={setDebtors} onCompleteSale={completeSale} role={user.role} />
         )}
         {tab === "debtors" && <Debtors debtors={debtors} setDebtors={setDebtors} />}
         {tab === "stock" && (
           <StockPage products={products} setProducts={setProducts} purchases={purchases} setPurchases={setPurchases} role={user.role} />
         )}
+        <Suspense fallback={<p className="text-xs" style={{ color: C.ink, opacity: 0.5 }}>Loading…</p>}>
         {tab === "analytics" && user.role === "admin" && (
           <AnalyticsPage products={products} sales={sales} debtors={debtors} purchases={purchases} />
         )}
@@ -261,11 +298,12 @@ export default function App() {
           />
         )}
         {tab === "export" && user.role === "admin" && (
-          <ExportPage products={products} sales={sales} debtors={debtors} purchases={purchases} onReset={resetAll} />
+          <ExportPage products={products} sales={sales} debtors={debtors} purchases={purchases} onReset={resetAll} onBackedUp={() => { setLastBackupAt(Date.now()); setDismissedBackup(false); }} />
         )}
         {tab === "advisor" && user.role === "admin" && (
           <Advisor products={products} sales={sales} debtors={debtors} purchases={purchases} onConfirmReorder={confirmReorder} />
         )}
+        </Suspense>
       </div>
     </div>
   );

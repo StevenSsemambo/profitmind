@@ -7,9 +7,11 @@ import { Search, Plus, Minus, Trash2, Receipt, Share2, Phone } from "lucide-reac
 import { C } from "../lib/theme.js";
 import { ugx } from "../lib/theme.js";
 import { PAYMENT_METHODS } from "../lib/seedData.js";
+import { newId } from "../lib/ids.js";
 import { Card, Field, Modal, inputStyle } from "./ui/primitives.jsx";
 
-export default function POS({ products, setProducts, debtors, setDebtors, addCreditSale, addSale }) {
+export default function POS({ products, debtors, setDebtors, onCompleteSale, role }) {
+  const canEditPrice = role === "admin"; // cashiers can't discount below the listed price
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState([]);
   const [lastReceipt, setLastReceipt] = useState(null);
@@ -59,11 +61,10 @@ export default function POS({ products, setProducts, debtors, setDebtors, addCre
   }
 
   const total = cart.reduce((s, i) => s + i.sellPrice * i.qty, 0);
-  const totalCost = cart.reduce((s, i) => s + i.costPrice * i.qty, 0);
 
   function addNewDebtor() {
     if (!newDebtorName.trim()) return;
-    const id = Math.max(0, ...debtors.map((d) => d.id)) + 1;
+    const id = newId();
     setDebtors((d) => [...d, { id, name: newDebtorName.trim(), phone: newDebtorPhone.trim(), owed: 0, paid: 0, history: [] }]);
     setDebtorId(String(id));
     setShowNewDebtor(false);
@@ -74,34 +75,14 @@ export default function POS({ products, setProducts, debtors, setDebtors, addCre
   function checkout() {
     setError("");
     if (cart.length === 0) return;
-    if (paymentMethod === "credit" && !debtorId) {
-      setError("Pick who this credit sale is for before completing it.");
+    // One atomic step in App: validates stock + debtor, then updates stock,
+    // the debtor's balance and the sales log together (see lib/sales.js).
+    const result = onCompleteSale({ cart, paymentMethod, debtorId, amountNow });
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-    // Final stock check right before committing.
-    for (const item of cart) {
-      const live = products.find((p) => p.id === item.productId);
-      if (!live || live.stock < item.qty) {
-        setError(`Not enough stock for ${item.name} — only ${live ? live.stock : 0} left.`);
-        return;
-      }
-    }
-    setProducts((ps) => ps.map((p) => {
-      const inCart = cart.find((i) => i.productId === p.id);
-      return inCart ? { ...p, stock: p.stock - inCart.qty } : p;
-    }));
-    let paidNow = 0;
-    if (paymentMethod === "credit") {
-      paidNow = Math.max(0, Math.min(Number(amountNow) || 0, total));
-      addCreditSale(Number(debtorId), total, paidNow);
-    }
-    addSale({
-      total, cost: totalCost, profit: total - totalCost, paymentMethod,
-      items: cart.map((i) => ({ productId: i.productId, name: i.name, qty: i.qty, sellPrice: i.sellPrice, costPrice: i.costPrice })),
-      date: Date.now(),
-    });
-    const debtorName = paymentMethod === "credit" ? debtors.find((d) => d.id === Number(debtorId))?.name : null;
-    setLastReceipt({ items: cart, total, paymentMethod, debtorName, paidNow, date: Date.now() });
+    setLastReceipt(result.receipt);
     setCart([]);
     setPaymentMethod("cash");
     setDebtorId("");
@@ -184,7 +165,7 @@ export default function POS({ products, setProducts, debtors, setDebtors, addCre
                         <Plus size={14} />
                       </button>
                     </div>
-                    {editingPriceId === i.productId ? (
+                    {canEditPrice && editingPriceId === i.productId ? (
                       <input
                         type="number"
                         autoFocus
@@ -197,9 +178,9 @@ export default function POS({ products, setProducts, debtors, setDebtors, addCre
                       />
                     ) : (
                       <button
-                        onClick={() => setEditingPriceId(i.productId)}
-                        className="w-20 text-right hover:underline"
-                        title="Click to adjust price (e.g. give a discount)"
+                        onClick={() => canEditPrice && setEditingPriceId(i.productId)}
+                        className={canEditPrice ? "w-20 text-right hover:underline" : "w-20 text-right cursor-default"}
+                        title={canEditPrice ? "Click to adjust price (e.g. give a discount)" : "Only the owner can change prices"}
                         style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.ink }}
                       >
                         {ugx(i.sellPrice * i.qty)}

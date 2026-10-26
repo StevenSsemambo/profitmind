@@ -2,6 +2,7 @@
 /* StockPage — record deliveries (stock + cost price update together),  */
 /* review recent purchases, and manage the product catalogue.           */
 /* ------------------------------------------------------------------ */
+import { newId } from "../lib/ids.js";
 import { useState, useEffect } from "react";
 import { PackagePlus, Plus, Pencil, Trash2 } from "lucide-react";
 import { C, ugx, fmtDate } from "../lib/theme.js";
@@ -32,7 +33,7 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
     setProducts((ps) => ps.map((x) => (x.id === p.id ? { ...x, stock: x.stock + q, costPrice: cost } : x)));
     setPurchases((ps) => [
       ...ps,
-      { id: Date.now() + Math.random(), productId: p.id, productName: p.name, qty: q, costPricePerUnit: cost, totalCost: cost * q, supplier: supplier.trim(), date: Date.now() },
+      { id: newId(), productId: p.id, productName: p.name, qty: q, costPricePerUnit: cost, totalCost: cost * q, supplier: supplier.trim(), date: Date.now() },
     ]);
     setNote(`Added ${q} ${p.unit}(s) of ${p.name} to stock.`);
     setQty("");
@@ -40,7 +41,7 @@ export default function StockPage({ products, setProducts, purchases, setPurchas
   }
 
   function addProduct(data) {
-    const id = Math.max(0, ...products.map((p) => p.id)) + 1;
+    const id = newId();
     setProducts((ps) => [...ps, { id, ...data }]);
     setShowNewProduct(false);
     setProductId(String(id));

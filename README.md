@@ -22,6 +22,9 @@ src/
                             offline-safe fallback for anything unmatched.
     seedData.js          — demo products/debtors/purchases, tabs, accounts
     csv.js               — CSV export helper
+    auth.js              — hashed PIN login, lockout, PIN change
+    sales.js             — atomic checkout (stock + debtor + sales log)
+    ids.js               — unique ids that are never reused
     intelligence.test.js — vitest suite for the intelligence engine
 
   hooks/
@@ -52,7 +55,7 @@ example that exercises the forecasting and debtor-risk logic directly.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # runs the intelligence.js unit tests
+npm test           # runs the unit tests (intelligence, advisor, sales, auth, reports)
 npm run build      # production build to dist/
 npm run preview    # serve the production build locally
 ```
@@ -61,25 +64,29 @@ npm run preview    # serve the production build locally
 
 ### 1. GitHub
 
-```bash
-git init
-git add .
-git commit -m "ProfitMind PWA"
-git branch -M main
-git remote add origin https://github.com/<your-username>/profitmind-pwa.git
-git push -u origin main
-```
+The code lives at `https://github.com/StevenSsemambo/profitmind`. Make
+changes on a branch, open a pull request, and merge to `main` — Netlify
+redeploys automatically on every push to `main`.
 
 ### 2. Netlify
 
 1. **New site from Git** → pick this repo. Netlify reads `netlify.toml`
    automatically (`npm run build`, publish `dist`, functions in
    `netlify/functions`) — no manual build settings needed.
-2. **Set the AI Advisor's API key** (optional but recommended): Site
-   settings → Environment variables → add `ANTHROPIC_API_KEY`. Without
-   it, the Advisor still answers everyday questions instantly from the
-   rule engine — it just tells the owner the AI fallback isn't configured
-   yet, instead of erroring.
+2. **Set the AI Advisor's environment variables** (Site configuration →
+   Environment variables). The AI part of the Advisor stays switched off
+   until both required ones exist; everyday questions still work without it.
+
+   | Variable | Required | Purpose |
+   |---|---|---|
+   | `ANTHROPIC_API_KEY` | yes | Your Anthropic API key (server-side only) |
+   | `ADVISOR_ACCESS_CODE` | yes | A long random string. The owner types it once in the Advisor tab; the function rejects every request without it |
+   | `ANTHROPIC_MODEL` | no | Model name, defaults to `claude-sonnet-4-6` |
+   | `ADVISOR_DAILY_CAP` | no | Max AI answers per day (default 300) |
+
+   The function also rate-limits per IP and refuses requests from other
+   websites. Those limits are in memory per serverless instance, so also set
+   a monthly spend limit in the Anthropic console.
 3. Deploy. The app is installable (Add to Home Screen) on both Android
    and iOS once served over HTTPS, which Netlify does by default.
 
@@ -89,7 +96,7 @@ If you want to test the `/.netlify/functions/advisor` route locally:
 
 ```bash
 npm install -g netlify-cli
-cp .env.example .env   # fill in ANTHROPIC_API_KEY
+cp .env.example .env   # fill in ANTHROPIC_API_KEY and ADVISOR_ACCESS_CODE
 netlify dev
 ```
 
@@ -122,8 +129,11 @@ was mainly about two things:
 A few things were fine for a demo but should change before this holds a
 real shop's data:
 
-- **Login is a demo account picker with no PIN pad** (`src/components/Login.jsx`,
-  `src/lib/seedData.js` → `ACCOUNTS`). Replace with real authentication.
+- **PIN login is local only.** On first launch the shop sets an Owner and a
+  Cashier PIN (stored as salted PBKDF2 hashes, with lockout after repeated
+  wrong guesses — `src/lib/auth.js`). With no server, this stops casual
+  access at the till but not someone with developer tools and the phone in
+  hand; real protection needs a backend with accounts.
 - **Data lives in `localStorage` on one device.** Fine for a single till,
   but there's no sync across devices and no server-side backup — anything
   that needs multi-device or multi-till support needs a real backend.
