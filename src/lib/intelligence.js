@@ -131,11 +131,17 @@ export function computeDebtorRisk(debtors) {
       const lastActivity = history[0];
       const idleDays = lastActivity ? daysSince(lastActivity.date) : null;
       let risk = "low";
+      const missedPromiseDays = d.promiseDate && balance > 0 ? Math.floor((Date.now() - d.promiseDate) / 86400000) : null;
       if (balance > 0) {
         if (idleDays !== null && idleDays >= 14) risk = "high";
         else if (idleDays !== null && idleDays >= 7) risk = "medium";
+        // Breaking a promised payment date is a stronger signal than being quiet.
+        if (missedPromiseDays !== null && missedPromiseDays >= 3) risk = "high";
+        else if (missedPromiseDays !== null && missedPromiseDays >= 1 && risk === "low") risk = "medium";
       }
-      const reason = idleDays !== null
+      const reason = missedPromiseDays !== null && missedPromiseDays >= 1
+        ? `Owes ${ugx(balance)} and promised to pay ${missedPromiseDays} day(s) ago but hasn't.`
+        : idleDays !== null
         ? `Owes ${ugx(balance)} with no payment or purchase activity in ${Math.round(idleDays)} day(s) — that crosses the ${risk === "high" ? "14-day high-risk" : "7-day medium-risk"} mark.`
         : `Owes ${ugx(balance)} with no recorded activity history at all.`;
       return { ...d, balance, idleDays, risk, reason };

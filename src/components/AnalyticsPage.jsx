@@ -10,15 +10,17 @@ import {
 } from "recharts";
 import { C, ugx } from "../lib/theme.js";
 import { buildInsights } from "../lib/intelligence.js";
+import { periodFinance } from "../lib/finance.js";
 import { PAYMENT_METHODS } from "../lib/seedData.js";
 import { Card, EmptyState, KpiCard } from "./ui/primitives.jsx";
 
-export default function AnalyticsPage({ products, sales, debtors, purchases }) {
+export default function AnalyticsPage({ products, sales, debtors, purchases, expenses = [], adjustments = [], onOpenMoney }) {
   const totalRevenue = sales.reduce((s, x) => s + x.total, 0);
   const totalProfit = sales.reduce((s, x) => s + x.profit, 0);
   const totalCOGS = purchases.reduce((s, x) => s + x.totalCost, 0);
   const outstandingDebt = debtors.reduce((s, d) => s + Math.max(0, d.owed - d.paid), 0);
   const margin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+  const allTime = periodFinance({ sales, expenses, adjustments, start: 0, end: Infinity });
   const insights = useMemo(() => buildInsights(products, sales, debtors, purchases), [products, sales, debtors, purchases]);
   const { reorderDrafts, slowMoving, debtorRisk, anomalies } = insights;
 
@@ -62,10 +64,21 @@ export default function AnalyticsPage({ products, sales, debtors, purchases }) {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <KpiCard label="Total revenue" value={ugx(totalRevenue)} />
-        <KpiCard label="Net profit" value={ugx(totalProfit)} accent={C.greenDark} />
-        <KpiCard label="Profit margin" value={`${margin.toFixed(1)}%`} />
+        <KpiCard label={`Gross profit · ${margin.toFixed(0)}%`} value={ugx(totalProfit)} />
+        <KpiCard label="Net profit (after expenses)" value={expenses.length === 0 && adjustments.length === 0 ? "—" : ugx(allTime.net)} accent={allTime.net >= 0 ? C.greenDark : C.brick} />
         <KpiCard label="Outstanding debt" value={ugx(outstandingDebt)} accent={outstandingDebt > 0 ? C.brick : C.ink} />
       </div>
+
+      {expenses.length === 0 && sales.length > 0 && (
+        <Card className="p-4 mb-6" style={{ borderColor: C.goldDark }}>
+          <p className="text-sm" style={{ color: C.ink }}>
+            Your profit here is <strong>before</strong> rent, wages, transport and other running costs, so it's higher than what you really keep.
+            {onOpenMoney && (
+              <button onClick={onOpenMoney} className="ml-2 underline" style={{ color: C.greenDark }}>Add expenses to see real profit →</button>
+            )}
+          </p>
+        </Card>
+      )}
 
       {anomalies.length > 0 && (
         <Card className="p-4 mb-6" style={{ borderColor: C.brick }}>
@@ -93,7 +106,7 @@ export default function AnalyticsPage({ products, sales, debtors, purchases }) {
               <Tooltip formatter={(v) => ugx(v)} contentStyle={{ borderColor: C.line, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="revenue" name="Revenue" stroke={C.navy} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="profit" name="Profit" stroke={C.greenDark} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="profit" name="Gross profit" stroke={C.greenDark} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         )}

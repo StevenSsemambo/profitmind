@@ -4,6 +4,7 @@
 /* printable/PDF version, and the "is a report due" check that drives   */
 /* both the in-app banner and the browser notification.                 */
 /* ------------------------------------------------------------------ */
+import { periodFinance } from "./finance.js";
 import { ugx, fmtDate } from "./theme.js";
 import { daysSince, salesInRange, computeProductBreakdown, computeCategoryBreakdown, computeBasketStats, buildInsights } from "./intelligence.js";
 
@@ -38,11 +39,14 @@ export const PERIOD_TITLE = { today: "Today's", week: "This Week's", month: "Thi
 // Builds one structured report object for a given period. This is the
 // single source of truth used by both the WhatsApp text version and the
 // printable/PDF version below, so the two are always in sync.
-export function buildPeriodReport(products, sales, debtors, purchases, period = "week") {
+export function buildPeriodReport(products, sales, debtors, purchases, period = "week", expenses = [], adjustments = []) {
   const insights = buildInsights(products, sales, debtors, purchases);
   const compare = computePeriodCompare(sales, period);
   const periodSales = compare.curSales;
-  const profit = periodSales.reduce((s, x) => s + x.profit, 0);
+  const profit = periodSales.reduce((s, x) => s + x.profit, 0); // gross profit
+  const fin = periodFinance({ sales: [], expenses, adjustments, start: compare.curStart, end: compare.curEnd + 1 });
+  const expensesTotal = fin.expensesTotal;
+  const stockLoss = fin.stockLoss;
   const topProducts = computeProductBreakdown(periodSales).slice(0, 5);
   const categories = computeCategoryBreakdown(products, periodSales);
   const basket = computeBasketStats(periodSales);
@@ -54,6 +58,11 @@ export function buildPeriodReport(products, sales, debtors, purchases, period = 
     generatedAt: Date.now(),
     revenue: compare.curRevenue,
     profit,
+    grossProfit: profit,
+    expensesTotal,
+    stockLoss,
+    netProfit: profit - expensesTotal - stockLoss,
+    hasExpenses: expenses.length > 0,
     salesCount: periodSales.length,
     changePct: compare.changePct,
     compareLabel: compare.compareLabel,
@@ -78,7 +87,13 @@ export function digestToWhatsAppText(report, shopName = "My Shop") {
   lines.push(`_${report.rangeLabel} · via ProfitMind_`);
   lines.push("");
   lines.push(`💰 Revenue: *${ugx(report.revenue)}*`);
-  lines.push(`📈 Profit: *${ugx(report.profit)}*`);
+  lines.push(`📈 Gross profit: *${ugx(report.grossProfit ?? report.profit)}*`);
+  if (report.expensesTotal > 0 || report.stockLoss > 0) {
+    lines.push(`🧾 Expenses: ${ugx(report.expensesTotal)}${report.stockLoss > 0 ? ` · stock lost: ${ugx(report.stockLoss)}` : ""}`);
+    lines.push(`✅ Net profit: *${ugx(report.netProfit)}*`);
+  } else if (!report.hasExpenses) {
+    lines.push("_No expenses recorded, so net profit can't be shown yet._");
+  }
   lines.push(`🧾 Sales: ${report.salesCount} (avg ${ugx(Math.round(report.avgSaleValue))})`);
   lines.push(fmtPct(report.changePct));
 
@@ -181,7 +196,8 @@ export function printPeriodReport(report, shopNameRaw) {
 
   <div class="kpis">
     <div class="kpi"><div class="label">Revenue</div><div class="value">${e(ugx(report.revenue))}</div></div>
-    <div class="kpi"><div class="label">Net Profit</div><div class="value">${e(ugx(report.profit))}</div></div>
+    <div class="kpi"><div class="label">Gross Profit</div><div class="value">${e(ugx(report.grossProfit ?? report.profit))}</div></div>
+    <div class="kpi"><div class="label">Net Profit</div><div class="value">${e(report.hasExpenses || report.stockLoss > 0 ? ugx(report.netProfit) : "n/a")}</div></div>
     <div class="kpi"><div class="label">Sales</div><div class="value">${e(report.salesCount)}</div></div>
   </div>
   <div class="change">${e(changeTxt)}</div>

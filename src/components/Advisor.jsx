@@ -8,11 +8,12 @@ import { useState, useEffect, useRef } from "react";
 import { Mic, Send, Volume2, VolumeX } from "lucide-react";
 import { C } from "../lib/theme.js";
 import { ruleBasedAnswer, buildDigest, offlineFallbackAnswer, SUGGESTIONS } from "../lib/advisorEngine.js";
+import { attentionItems } from "../lib/advisorFinance.js";
 import { Card, inputStyle } from "./ui/primitives.jsx";
 import Briefing from "./Briefing.jsx";
 import useVoice from "../hooks/useVoice.js";
 
-export default function Advisor({ products, sales, debtors, purchases, onConfirmReorder }) {
+export default function Advisor({ products, sales, debtors, purchases, extras = {}, onConfirmReorder }) {
   const [thread, setThread] = useState([]);
   const [question, setQuestion] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -38,7 +39,7 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
     setQuestion("");
     setThinking(true);
 
-    const ruleResult = ruleBasedAnswer(q, products, sales, debtors, purchases);
+    const ruleResult = ruleBasedAnswer(q, products, sales, debtors, purchases, extras);
     if (ruleResult) {
       setThinking(false);
       setThread((t) => [...t, { role: "ai", ...ruleResult }]);
@@ -57,12 +58,12 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
     // answer even with zero connectivity.
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       setThinking(false);
-      setThread((t) => [...t, { role: "ai", source: "offline", text: offlineFallbackAnswer(products, sales, debtors, purchases) }]);
+      setThread((t) => [...t, { role: "ai", source: "offline", text: offlineFallbackAnswer(products, sales, debtors, purchases, extras) }]);
       return;
     }
 
     try {
-      const digest = buildDigest(products, sales, debtors, purchases);
+      const digest = buildDigest(products, sales, debtors, purchases, extras);
       const priorTurns = thread.slice(-6).map((m) => ({
         role: m.role === "user" ? "user" : "assistant",
         content: m.text,
@@ -81,7 +82,7 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
       const text = (data && data.text) || "I couldn't work out an answer to that.";
       setThread((t) => [...t, { role: "ai", source: "ai", text }]);
     } catch {
-      setThread((t) => [...t, { role: "ai", source: "offline", text: offlineFallbackAnswer(products, sales, debtors, purchases) }]);
+      setThread((t) => [...t, { role: "ai", source: "offline", text: offlineFallbackAnswer(products, sales, debtors, purchases, extras) }]);
     } finally {
       setThinking(false);
     }
@@ -98,6 +99,8 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
       ask(finalText);
     });
   }
+
+  const attention = attentionItems(products, sales, debtors, purchases, extras);
 
   return (
     <div>
@@ -123,6 +126,19 @@ export default function Advisor({ products, sales, debtors, purchases, onConfirm
           </button>
         )}
       </div>
+      {attention.length > 0 && (
+        <Card className="p-4 mb-4" style={{ borderColor: C.goldDark }}>
+          <h3 className="font-medium mb-2 text-sm" style={{ color: C.ink }}>Needs your attention</h3>
+          <div className="space-y-2">
+            {attention.map((a, i) => (
+              <div key={i} className="flex items-start justify-between gap-3">
+                <p className="text-sm" style={{ color: C.ink }}>{a.text}</p>
+                <button onClick={() => ask(a.ask)} className="shrink-0 text-xs underline" style={{ color: C.greenDark }}>Tell me more</button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <Briefing products={products} sales={sales} debtors={debtors} purchases={purchases} onConfirmReorder={onConfirmReorder} />
       <Card className="p-4 mb-4" style={{ minHeight: "160px" }}>
         {thread.length === 0 && (

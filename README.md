@@ -4,6 +4,17 @@ Offline-first shop management for Ugandan retail: POS, debtors, stock,
 analytics, printable/WhatsApp reports, and an AI Advisor that only ever
 reasons from the shop's own numbers.
 
+## What it tracks
+
+- **Sell** — till with cash, mobile money and credit sales; the owner can discount, cashiers can't. Credit sales respect each customer's credit limit.
+- **History** — every sale with who rang it up; mistakes are *voided* (stock returns, credit reversed, reason kept — never deleted).
+- **Stock** — deliveries with weighted-average cost, part-payment to suppliers, expiry dates, **Adjust stock** (counts, damage, expiry, theft are logged as losses), and CSV import for products.
+- **Debtors** — add/edit customers, credit limits, promised payment dates, payments by cash or mobile money (never more than owed).
+- **Money** — gross profit, running expenses and stock losses → **net profit**; end-of-day **cash count** against what the till should hold; what the shop owes suppliers.
+- **Advisor** — answers from the shop's own numbers and speaks first about expired stock, supplier price rises, cash shortages, voids and discounts, and overstated profit.
+- **Export & Backup** — CSVs, a full backup file, and **Restore** (validated before anything is replaced).
+
+
 ## Project structure
 
 ```

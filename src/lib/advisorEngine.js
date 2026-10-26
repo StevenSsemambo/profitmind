@@ -8,9 +8,10 @@
 /* ------------------------------------------------------------------ */
 import { ugx } from "./theme.js";
 import { buildInsights, salesInRange, periodRange, parsePeriod, PERIOD_LABEL, LOOKBACK_DAYS, computeProductBreakdown, computeCategoryBreakdown } from "./intelligence.js";
+import { financeDigestLines, financeAnswer } from "./advisorFinance.js";
 import { parseScenario, simulateScenario, narrateScenario, findProductInText } from "./scenario.js";
 
-export function buildDigest(products, sales, debtors, purchases) {
+export function buildDigest(products, sales, debtors, purchases, extras = {}) {
   const insights = buildInsights(products, sales, debtors, purchases);
   const {
     reorderDrafts, slowMoving, debtorRisk, anomalies,
@@ -28,9 +29,9 @@ export function buildDigest(products, sales, debtors, purchases) {
   const fmtPct = (v) => (v === null ? "no prior data to compare" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`);
 
   return [
-    `Today: ${ugx(revenue)} revenue, ${ugx(profit)} net profit, ${todaySales.length} sale(s). Vs yesterday: ${fmtPct(growth.dayChangePct)}.`,
+    `Today: ${ugx(revenue)} revenue, ${ugx(profit)} gross profit (before expenses), ${todaySales.length} sale(s). Vs yesterday: ${fmtPct(growth.dayChangePct)}.`,
     `This week so far: ${ugx(growth.thisWeekRevenue)} revenue. Vs last week: ${fmtPct(growth.weekChangePct)}.`,
-    `Overall (all-time) profit margin: ${overallMargin.toFixed(1)}% (${ugx(totalProfit)} profit on ${ugx(totalRevenue)} revenue across ${sales.length} sale(s)).`,
+    `Overall (all-time) gross margin: ${overallMargin.toFixed(1)}% (${ugx(totalProfit)} gross profit on ${ugx(totalRevenue)} revenue across ${sales.length} sale(s)).`,
     todayProducts.length
       ? `Top-selling products TODAY by revenue: ${todayProducts.slice(0, 5).map((p) => `${p.name} (${p.units} unit(s), ${ugx(p.revenue)})`).join(", ")}.`
       : "No sales recorded yet today.",
@@ -53,14 +54,23 @@ export function buildDigest(products, sales, debtors, purchases) {
       ? `Debtors worth following up, each with its exact reason: ${debtorRisk.map((d) => `${d.name} [reason: ${d.reason}]`).join("; ")}.`
       : "No debtors flagged as overdue right now.",
     anomalies.length ? `Flags today: ${anomalies.map((a) => a.text).join(" ")}` : "No anomalies detected today.",
+    ...financeDigestLines(products, sales, debtors, purchases, extras),
   ].join("\n");
 }
 
-export function ruleBasedAnswer(question, products, sales, debtors, purchases) {
+export function ruleBasedAnswer(question, products, sales, debtors, purchases, extras = {}) {
   const q = question.toLowerCase();
   const insights = buildInsights(products, sales, debtors, purchases);
   const period = parsePeriod(q);
   const label = PERIOD_LABEL[period];
+
+  // MONEY & CONTROLS — net profit, expenses, supplier debts, expiry, margin
+  // squeeze, cash gaps, voids/discounts, stock losses. Skipped for "why" questions,
+  // which are answered from the exact reason attached to each flag below.
+  if (!/\bwhy\b/.test(q)) {
+    const money = financeAnswer(q, products, sales, debtors, purchases, extras);
+    if (money) return money;
+  }
 
   // WHY — explain a specific flagged product or debtor using the exact
   // `reason` computed alongside that flag, never a fresh guess.
@@ -157,7 +167,7 @@ export function ruleBasedAnswer(question, products, sales, debtors, purchases) {
     const g = insights.growth.dayChangePct;
     return {
       source: "data",
-      text: `Today so far: ${ugx(revenue)} in sales, ${ugx(profit)} net profit.` + (g !== null ? ` That's ${g >= 0 ? "up" : "down"} ${Math.abs(g).toFixed(1)}% vs yesterday.` : ""),
+      text: `Today so far: ${ugx(revenue)} in sales, ${ugx(profit)} gross profit (before expenses).` + (g !== null ? ` That's ${g >= 0 ? "up" : "down"} ${Math.abs(g).toFixed(1)}% vs yesterday.` : ""),
     };
   }
   if (/restock|reorder|running out|forecast/.test(q)) {
@@ -247,7 +257,7 @@ export function ruleBasedAnswer(question, products, sales, debtors, purchases) {
     const totalRevenue = sales.reduce((s, x) => s + x.total, 0);
     const totalProfit = sales.reduce((s, x) => s + x.profit, 0);
     const margin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-    return { source: "data", text: `Overall profit margin so far: ${margin.toFixed(1)}% (${ugx(totalProfit)} profit on ${ugx(totalRevenue)} revenue).` };
+    return { source: "data", text: `Overall gross margin so far: ${margin.toFixed(1)}% (${ugx(totalProfit)} gross profit on ${ugx(totalRevenue)} revenue, before expenses).` };
   }
   if (/category|categories/.test(q) && /sell|revenue|best/.test(q)) {
     const cats = period === "today" ? insights.todayCategories : computeCategoryBreakdown(products, salesInRange(sales, ...periodRange(period)));
@@ -306,7 +316,7 @@ export function ruleBasedAnswer(question, products, sales, debtors, purchases) {
 // is unreachable (offline, or the network call failed) — a real snapshot
 // grounded in the shop's own data rather than a dead "couldn't answer".
 // Never invents anything; if there's genuinely nothing to say it says so.
-export function offlineFallbackAnswer(products, sales, debtors, purchases) {
+export function offlineFallbackAnswer(products, sales, debtors, purchases, extras = {}) {
   const insights = buildInsights(products, sales, debtors, purchases);
   const { reorderDrafts, debtorRisk } = insights;
   const todaySales = salesInRange(sales, ...periodRange("today"));
@@ -315,7 +325,7 @@ export function offlineFallbackAnswer(products, sales, debtors, purchases) {
 
   const lines = [
     "I couldn't match that to a specific report, and the AI assistant isn't reachable right now — here's a quick snapshot instead:",
-    `Today: ${ugx(revenue)} revenue, ${ugx(profit)} profit, ${todaySales.length} sale(s).`,
+    `Today: ${ugx(revenue)} revenue, ${ugx(profit)} gross profit, ${todaySales.length} sale(s).`,
     reorderDrafts.length
       ? `${reorderDrafts.length} product(s) forecast to run low: ${reorderDrafts.slice(0, 3).map((p) => p.name).join(", ")}${reorderDrafts.length > 3 ? ", …" : ""}.`
       : "Nothing forecast to run low.",
@@ -334,5 +344,9 @@ export const SUGGESTIONS = [
   "What if I raise Sugar's price by 10%?",
   "Who should I follow up with for payment?",
   "Is revenue up or down this week?",
+  "What is my real profit after expenses?",
+  "Is anything expiring soon?",
+  "What do I owe my suppliers?",
+  "Have any supplier prices squeezed my margins?",
 ];
 

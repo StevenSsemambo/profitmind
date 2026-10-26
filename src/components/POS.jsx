@@ -38,7 +38,7 @@ export default function POS({ products, debtors, setDebtors, onCompleteSale, rol
         if (existing.qty >= p.stock) return c; // capped at real stock
         return c.map((i) => (i.productId === p.id ? { ...i, qty: i.qty + 1 } : i));
       }
-      return [...c, { productId: p.id, name: p.name, sellPrice: p.sellPrice, costPrice: p.costPrice, qty: 1 }];
+      return [...c, { productId: p.id, name: p.name, sellPrice: p.sellPrice, listPrice: p.sellPrice, costPrice: p.costPrice, qty: 1 }];
     });
   }
 

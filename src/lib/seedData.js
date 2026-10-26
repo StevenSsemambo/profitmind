@@ -4,7 +4,7 @@
 /* ------------------------------------------------------------------ */
 import {
   Banknote, Smartphone, HandCoins, ShoppingCart, PackagePlus,
-  BarChart3, FileText, Download, Sparkles,
+  BarChart3, FileText, Download, Sparkles, History, Wallet,
 } from "lucide-react";
 
 export const SEED_PRODUCTS = [
@@ -46,8 +46,10 @@ export const PAYMENT_METHODS = [
 
 export const TABS = [
   { id: "pos", label: "Sell", icon: ShoppingCart, roles: ["admin", "cashier"] },
+  { id: "history", label: "History", icon: History, roles: ["admin", "cashier"] },
   { id: "debtors", label: "Debtors", icon: HandCoins, roles: ["admin", "cashier"] },
   { id: "stock", label: "Stock", icon: PackagePlus, roles: ["admin", "cashier"] },
+  { id: "money", label: "Money", icon: Wallet, roles: ["admin"] },
   { id: "analytics", label: "Analytics", icon: BarChart3, roles: ["admin"] },
   { id: "reports", label: "Reports", icon: FileText, roles: ["admin"] },
   { id: "export", label: "Export", icon: Download, roles: ["admin"] },

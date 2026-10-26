@@ -24,7 +24,7 @@ function ReportKPI({ label, value }) {
   );
 }
 
-export default function ReportsPage({ products, sales, debtors, purchases, settings, setSettings, shopName = "My Shop" }) {
+export default function ReportsPage({ products, sales, debtors, purchases, expenses = [], adjustments = [], settings, setSettings, shopName = "My Shop" }) {
   const [period, setPeriod] = useState("week");
   const [note, setNote] = useState("");
   const [phoneDraft, setPhoneDraft] = useState(settings.whatsappNumber || "");
@@ -52,8 +52,8 @@ export default function ReportsPage({ products, sales, debtors, purchases, setti
   }
 
   const report = useMemo(
-    () => buildPeriodReport(products, sales, debtors, purchases, period),
-    [products, sales, debtors, purchases, period]
+    () => buildPeriodReport(products, sales, debtors, purchases, period, expenses, adjustments),
+    [products, sales, debtors, purchases, expenses, adjustments, period]
   );
 
   function markDelivered() {
@@ -116,7 +116,8 @@ export default function ReportsPage({ products, sales, debtors, purchases, setti
 
         <div className="flex gap-3 mb-5">
           <ReportKPI label="Revenue" value={ugx(report.revenue)} />
-          <ReportKPI label="Profit" value={ugx(report.profit)} />
+          <ReportKPI label="Gross profit" value={ugx(report.grossProfit)} />
+          <ReportKPI label="Net profit" value={report.hasExpenses || report.stockLoss > 0 ? ugx(report.netProfit) : "—"} />
           <ReportKPI label="Sales" value={report.salesCount} />
         </div>
 

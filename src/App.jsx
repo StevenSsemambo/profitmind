@@ -3,12 +3,14 @@
 /* and the weekly/monthly report due-check (banner + browser            */
 /* notification).                                                       */
 /* ------------------------------------------------------------------ */
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from "react";
 import { Bell, LogOut, X, AlertTriangle, DatabaseBackup } from "lucide-react";
 import { C, FONT_IMPORT } from "./lib/theme.js";
 import { storage, STORAGE_KEY } from "./lib/storage.js";
 import { computeReportDue } from "./lib/reports.js";
-import { applySale } from "./lib/sales.js";
+import { applySale, applyVoid } from "./lib/sales.js";
+import { applyRestock } from "./lib/stock.js";
+import { activeSales } from "./lib/finance.js";
 import { newId } from "./lib/ids.js";
 import { SEED_PRODUCTS, SEED_DEBTORS, SEED_PURCHASES, TABS, DEFAULT_REPORT_SETTINGS } from "./lib/seedData.js";
 
@@ -17,6 +19,9 @@ import Login from "./components/Login.jsx";
 import POS from "./components/POS.jsx";
 import Debtors from "./components/Debtors.jsx";
 import StockPage from "./components/StockPage.jsx";
+import SalesHistory from "./components/SalesHistory.jsx";
+import MoneyPage from "./components/MoneyPage.jsx";
+import SetupWizard from "./components/SetupWizard.jsx";
 // Owner-only pages are split into their own chunks (recharts is the big one),
 // so the till loads fast on slow mobile connections.
 const AnalyticsPage = lazy(() => import("./components/AnalyticsPage.jsx"));
@@ -34,6 +39,11 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState(SEED_PURCHASES);
   const [reportSettings, setReportSettings] = useState(DEFAULT_REPORT_SETTINGS);
+  const [shop, setShop] = useState({ name: "My Shop", setupDone: true });
+  const [expenses, setExpenses] = useState([]);
+  const [cashups, setCashups] = useState([]);
+  const [adjustments, setAdjustments] = useState([]);
+  const [supplierPayments, setSupplierPayments] = useState([]);
   const [lastBackupAt, setLastBackupAt] = useState(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [dismissedBanner, setDismissedBanner] = useState(false);
@@ -91,8 +101,18 @@ export default function App() {
     (async () => {
       try {
         const res = await storage.get(STORAGE_KEY);
+        if (!cancelled && (!res || !res.value)) {
+          // Brand-new install: the owner will be walked through setup.
+          setShop({ name: "", setupDone: false });
+        }
         if (!cancelled && res && res.value) {
           const parsed = JSON.parse(res.value);
+          // Shops that were already using the app before setup existed are treated as set up.
+          setShop(parsed.shop && typeof parsed.shop === "object" ? { name: "My Shop", setupDone: true, ...parsed.shop } : { name: "My Shop", setupDone: true });
+          if (parsed.expenses) setExpenses(parsed.expenses);
+          if (parsed.cashups) setCashups(parsed.cashups);
+          if (parsed.adjustments) setAdjustments(parsed.adjustments);
+          if (parsed.supplierPayments) setSupplierPayments(parsed.supplierPayments);
           if (parsed.products) setProducts(parsed.products);
           if (parsed.sales) setSales(parsed.sales);
           if (parsed.debtors) setDebtors(parsed.debtors);
@@ -114,17 +134,20 @@ export default function App() {
     if (!loaded) return;
     (async () => {
       try {
-        const ok = await storage.set(STORAGE_KEY, JSON.stringify({ products, sales, debtors, purchases, reportSettings, lastBackupAt }));
+        const ok = await storage.set(STORAGE_KEY, JSON.stringify({ products, sales, debtors, purchases, reportSettings, lastBackupAt, shop, expenses, cashups, adjustments, supplierPayments }));
         setSaveFailed(!ok); // storage.set returns null when the browser refuses (full / blocked)
       } catch (e) {
         setSaveFailed(true);
       }
     })();
-  }, [products, sales, debtors, purchases, reportSettings, lastBackupAt, loaded]);
+  }, [products, sales, debtors, purchases, reportSettings, lastBackupAt, shop, expenses, cashups, adjustments, supplierPayments, loaded]);
+
+  // Voided sales stay on record (History) but never count in any total.
+  const liveSales = useMemo(() => activeSales(sales), [sales]);
 
   // One checkout = one validated, atomic update of stock + debtor + sales log.
   function completeSale({ cart, paymentMethod, debtorId, amountNow }) {
-    const result = applySale({ products, debtors, cart, paymentMethod, debtorId, amountNow });
+    const result = applySale({ products, debtors, cart, paymentMethod, debtorId, amountNow, by: user ? user.name : "" });
     if (!result.ok) return result;
     setProducts(result.products);
     setDebtors(result.debtors);
@@ -137,23 +160,51 @@ export default function App() {
     const p = products.find((x) => x.id === productId);
     if (!p || !qty || qty <= 0) return;
     const cost = p.costPrice;
-    setProducts((ps) => ps.map((x) => (x.id === productId ? { ...x, stock: x.stock + qty } : x)));
+    setProducts((ps) => ps.map((x) => (x.id === productId ? applyRestock(x, qty, cost) : x)));
     setPurchases((ps) => [
       ...ps,
       { id: newId(), productId, productName: p.name, qty, costPricePerUnit: cost, totalCost: cost * qty, supplier: supplier || "", date: Date.now() },
     ]);
   }
 
+  function voidSale(saleId, reason) {
+    const result = applyVoid({ products, debtors, sales, saleId, by: user ? user.name : "", reason });
+    if (!result.ok) return result;
+    setProducts(result.products);
+    setDebtors(result.debtors);
+    setSales(result.sales);
+    return result;
+  }
+
+  // First-run setup: name the shop, then start empty or with sample data.
+  function finishSetup(name, useDemo) {
+    if (!useDemo) {
+      setProducts([]); setDebtors([]); setPurchases([]); setSales([]);
+    }
+    setShop({ name: name.trim() || "My Shop", setupDone: true });
+  }
+
+  // Replaces everything with a validated backup (see lib/backup.js).
+  function restoreBackup(data) {
+    setProducts(data.products);
+    setSales(data.sales);
+    setDebtors(data.debtors);
+    setPurchases(data.purchases);
+    setExpenses(data.expenses);
+    setCashups(data.cashups);
+    setAdjustments(data.adjustments);
+    setSupplierPayments(data.supplierPayments);
+    setReportSettings({ ...DEFAULT_REPORT_SETTINGS, ...(data.reportSettings || {}) });
+    setShop({ name: "My Shop", setupDone: true, ...(data.shop || {}) });
+    setLastBackupAt(Date.now());
+  }
+
+  // Erases the shop's records (PINs and shop name are kept).
   async function resetAll() {
-    setProducts(SEED_PRODUCTS);
-    setDebtors(SEED_DEBTORS);
-    setSales([]);
-    setPurchases(SEED_PURCHASES);
+    setProducts([]); setDebtors([]); setSales([]); setPurchases([]);
+    setExpenses([]); setCashups([]); setAdjustments([]); setSupplierPayments([]);
     setReportSettings(DEFAULT_REPORT_SETTINGS);
     setLastBackupAt(null);
-    try {
-      await storage.delete(STORAGE_KEY);
-    } catch (e) { /* ignore */ }
   }
 
   if (booting || !loaded) {
@@ -162,6 +213,18 @@ export default function App() {
 
   if (!user) {
     return <Login onLogin={(a) => { setUser(a); setTab("pos"); }} />;
+  }
+
+  if (!shop.setupDone) {
+    if (user.role === "admin") return <SetupWizard onDone={finishSetup} />;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 text-center" style={{ background: C.paper, color: C.ink }}>
+        <div>
+          <p className="mb-4">The owner needs to finish setting up the shop first. Please ask them to sign in.</p>
+          <button onClick={() => setUser(null)} className="text-sm underline">Back to sign in</button>
+        </div>
+      </div>
+    );
   }
 
   const visibleTabs = TABS.filter((t) => t.roles.includes(user.role));
@@ -186,7 +249,7 @@ export default function App() {
             <span className="w-2 h-2 rounded-full" style={{ background: C.gold }} />
             <span className="w-2 h-2 rounded-full" style={{ background: C.green }} />
             <span className="w-2 h-2 rounded-full" style={{ background: C.brick }} />
-            <h1 className="text-xl ml-1" style={{ fontFamily: "'Fraunces', serif", color: C.ink }}>ProfitMind</h1>
+            <h1 className="text-xl ml-1" style={{ fontFamily: "'Fraunces', serif", color: C.ink }}>{shop.name || "ProfitMind"}</h1>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -279,18 +342,34 @@ export default function App() {
         {tab === "pos" && (
           <POS products={products} debtors={debtors} setDebtors={setDebtors} onCompleteSale={completeSale} role={user.role} />
         )}
-        {tab === "debtors" && <Debtors debtors={debtors} setDebtors={setDebtors} />}
+        {tab === "history" && <SalesHistory sales={sales} role={user.role} onVoid={voidSale} />}
+        {tab === "debtors" && <Debtors debtors={debtors} setDebtors={setDebtors} role={user.role} />}
         {tab === "stock" && (
-          <StockPage products={products} setProducts={setProducts} purchases={purchases} setPurchases={setPurchases} role={user.role} />
+          <StockPage products={products} setProducts={setProducts} purchases={purchases} setPurchases={setPurchases} adjustments={adjustments} setAdjustments={setAdjustments} role={user.role} userName={user.name} />
+        )}
+        {tab === "money" && user.role === "admin" && (
+          <MoneyPage
+            sales={liveSales}
+            debtors={debtors}
+            purchases={purchases}
+            expenses={expenses} setExpenses={setExpenses}
+            cashups={cashups} setCashups={setCashups}
+            adjustments={adjustments}
+            supplierPayments={supplierPayments} setSupplierPayments={setSupplierPayments}
+            userName={user.name}
+          />
         )}
         <Suspense fallback={<p className="text-xs" style={{ color: C.ink, opacity: 0.5 }}>Loading…</p>}>
         {tab === "analytics" && user.role === "admin" && (
-          <AnalyticsPage products={products} sales={sales} debtors={debtors} purchases={purchases} />
+          <AnalyticsPage products={products} sales={liveSales} debtors={debtors} purchases={purchases} expenses={expenses} adjustments={adjustments} onOpenMoney={() => setTab("money")} />
         )}
         {tab === "reports" && user.role === "admin" && (
           <ReportsPage
+            shopName={shop.name}
+            expenses={expenses}
+            adjustments={adjustments}
             products={products}
-            sales={sales}
+            sales={liveSales}
             debtors={debtors}
             purchases={purchases}
             settings={reportSettings}
@@ -298,10 +377,10 @@ export default function App() {
           />
         )}
         {tab === "export" && user.role === "admin" && (
-          <ExportPage products={products} sales={sales} debtors={debtors} purchases={purchases} onReset={resetAll} onBackedUp={() => { setLastBackupAt(Date.now()); setDismissedBackup(false); }} />
+          <ExportPage products={products} sales={sales} debtors={debtors} purchases={purchases} expenses={expenses} cashups={cashups} adjustments={adjustments} supplierPayments={supplierPayments} reportSettings={reportSettings} shop={shop} onRenameShop={(name) => setShop((s) => ({ ...s, name: name.trim() || s.name }))} onRestore={restoreBackup} onReset={resetAll} onBackedUp={() => { setLastBackupAt(Date.now()); setDismissedBackup(false); }} />
         )}
         {tab === "advisor" && user.role === "admin" && (
-          <Advisor products={products} sales={sales} debtors={debtors} purchases={purchases} onConfirmReorder={confirmReorder} />
+          <Advisor products={products} sales={liveSales} debtors={debtors} purchases={purchases} extras={{ expenses, adjustments, cashups, supplierPayments, allSales: sales }} onConfirmReorder={confirmReorder} />
         )}
         </Suspense>
       </div>
