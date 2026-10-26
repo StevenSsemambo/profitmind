@@ -12,17 +12,12 @@
 // Environment variables (Netlify → Site configuration → Environment variables):
 //   GEMINI_API_KEY         Google AI Studio key (aistudio.google.com/apikey)
 //   GROQ_API_KEY           Groq key (console.groq.com/keys)
-//   ADVISOR_ACCESS_CODE    required — a long random string. The shop owner
-//                          enters it once in the Advisor tab; without it
-//                          this function refuses to call any provider.
 //   GEMINI_MODEL / GEMINI_FALLBACK_MODEL / GROQ_MODEL / GROQ_FALLBACK_MODEL
 //                          optional model overrides (free model lists change)
 //   ADVISOR_DAILY_CAP      optional — max AI answers per day (default 300)
 //
 // Free tiers have their own hard limits, so the per-IP and daily caps below
 // mostly protect those quotas from being drained by strangers.
-
-const crypto = require("crypto");
 
 const MAX_PER_IP = 20;                 // requests…
 const WINDOW_MS = 10 * 60 * 1000;      // …per 10 minutes, per client IP
@@ -35,12 +30,6 @@ const json = (statusCode, body) => ({
   headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   body: JSON.stringify(body),
 });
-
-function safeEqual(a, b) {
-  const ha = crypto.createHash("sha256").update(String(a)).digest();
-  const hb = crypto.createHash("sha256").update(String(b)).digest();
-  return crypto.timingSafeEqual(ha, hb);
-}
 
 function clientIp(event) {
   const h = event.headers || {};
@@ -85,15 +74,11 @@ exports.handler = async (event) => {
 
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const accessCode = process.env.ADVISOR_ACCESS_CODE;
-  if ((!geminiKey && !groqKey) || !accessCode) {
+  if (!geminiKey && !groqKey) {
     return json(200, {
-      text: "The AI assistant isn't set up yet — the site owner needs to add GEMINI_API_KEY (and optionally GROQ_API_KEY) plus ADVISOR_ACCESS_CODE in Netlify. Everyday questions still work without it.",
+      text: "The AI assistant isn't set up yet — the site owner needs to add GEMINI_API_KEY (and optionally GROQ_API_KEY) in Netlify. Everyday questions still work without it.",
     });
   }
-
-  const supplied = headers["x-advisor-code"] || headers["X-Advisor-Code"] || "";
-  if (!supplied || !safeEqual(supplied, accessCode)) return json(401, { error: "unauthorized" });
 
   if (rateLimited(clientIp(event))) return json(429, { error: "Too many requests — wait a few minutes." });
   if (overDailyCap()) return json(200, { text: "The AI assistant has reached today's limit. Everyday questions still work, and it resets tomorrow." });

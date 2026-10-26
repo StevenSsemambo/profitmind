@@ -7,7 +7,7 @@ let ipCounter = 0;
 const call = (body = { question: "why is sugar low?", digest: "Sugar: 6 left", priorTurns: [] }, headers = {}) =>
   handler({
     httpMethod: "POST",
-    headers: { host: "shop.netlify.app", "x-advisor-code": "code", "x-nf-client-connection-ip": `10.0.0.${++ipCounter}`, ...headers },
+    headers: { host: "shop.netlify.app", "x-nf-client-connection-ip": `10.0.0.${++ipCounter}`, ...headers },
     body: JSON.stringify(body),
   });
 
@@ -27,7 +27,6 @@ function mockFetch(routes) {
 }
 
 beforeEach(() => {
-  process.env.ADVISOR_ACCESS_CODE = "code";
   process.env.GEMINI_API_KEY = "gem-key";
   process.env.GROQ_API_KEY = "groq-key";
   delete process.env.GEMINI_MODEL; delete process.env.GEMINI_FALLBACK_MODEL;
@@ -117,13 +116,6 @@ describe("advisor guards", () => {
     mockFetch([]);
     const r = await call();
     expect(JSON.parse(r.body).text).toMatch(/isn't set up/);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("rejects a wrong access code before calling any provider", async () => {
-    mockFetch([]);
-    const r = await call(undefined, { "x-advisor-code": "nope" });
-    expect(r.statusCode).toBe(401);
     expect(fetch).not.toHaveBeenCalled();
   });
 

@@ -75,14 +75,13 @@ redeploys automatically on every push to `main`.
    `netlify/functions`) — no manual build settings needed.
 2. **Set the AI Advisor's environment variables** (Site configuration →
    Environment variables). The AI part of the Advisor stays switched off
-   until `ADVISOR_ACCESS_CODE` and at least one provider key exist;
-   everyday questions work without it.
+   until at least one provider key exists; everyday questions work
+   without it.
 
    | Variable | Required | Purpose |
    |---|---|---|
    | `GEMINI_API_KEY` | recommended | Main AI. Free key from [Google AI Studio](https://aistudio.google.com/apikey) |
    | `GROQ_API_KEY` | recommended | Backup AI, used when Gemini fails or is rate limited. Free key from [console.groq.com/keys](https://console.groq.com/keys) |
-   | `ADVISOR_ACCESS_CODE` | yes | A long random string. The owner types it once in the Advisor tab; the function rejects every request without it |
    | `GEMINI_MODEL` | no | Default `gemini-3.8-flash` |
    | `GEMINI_FALLBACK_MODEL` | no | Default `gemini-3.5-flash-lite` (separate free quota) |
    | `GROQ_MODEL` | no | Default `openai/gpt-oss-120b` |
@@ -95,8 +94,8 @@ redeploys automatically on every push to `main`.
    Advisor starts falling back to offline answers, check the current free
    models and update the model variables — no code change needed.
 
-   The function also rate-limits per IP and refuses requests from other
-   websites. Those limits are in memory per serverless instance.
+   The function rate-limits per IP, caps total answers per day, and refuses
+   requests from other websites. Those limits are in memory per serverless instance.
 
    **Privacy:** free-tier Gemini content may be used by Google to improve its
    products (outside the EEA, UK and Switzerland). The Advisor sends a
@@ -111,7 +110,7 @@ If you want to test the `/.netlify/functions/advisor` route locally:
 
 ```bash
 npm install -g netlify-cli
-cp .env.example .env   # fill in GEMINI_API_KEY, GROQ_API_KEY and ADVISOR_ACCESS_CODE
+cp .env.example .env   # fill in GEMINI_API_KEY and GROQ_API_KEY
 netlify dev
 ```
 
