@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ */
 /* Advisor rule engine — answers the common questions straight from     */
 /* the shop's own numbers (no network call), and builds the plain-text  */
-/* digest that's handed to Claude for anything it doesn't recognise.    */
+/* digest that's handed to the AI for anything it doesn't recognise.    */
 /* This is deliberately React-free and side-effect-free so it can be    */
 /* unit tested on its own: feed it a question string plus plain data     */
 /* arrays, assert on the returned { source, text }.                     */
@@ -302,7 +302,7 @@ export function ruleBasedAnswer(question, products, sales, debtors, purchases) {
   return null;
 }
 
-// Last-resort answer when the rule engine found no exact match AND Claude
+// Last-resort answer when the rule engine found no exact match AND the AI
 // is unreachable (offline, or the network call failed) — a real snapshot
 // grounded in the shop's own data rather than a dead "couldn't answer".
 // Never invents anything; if there's genuinely nothing to say it says so.

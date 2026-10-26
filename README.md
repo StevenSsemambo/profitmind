@@ -18,7 +18,7 @@ src/
     advisorEngine.js     — rule-based Q&A (today's numbers, restocking,
                             named products, named debtors, suppliers,
                             payment-method breakdown, comparisons, what-if
-                            scenarios) + the digest fed to Claude, plus an
+                            scenarios) + the digest fed to the AI, plus an
                             offline-safe fallback for anything unmatched.
     seedData.js          — demo products/debtors/purchases, tabs, accounts
     csv.js               — CSV export helper
@@ -41,7 +41,7 @@ src/
                             report due-check (banner + browser notification)
   main.jsx, index.css     — entry point
 
-netlify/functions/advisor.js  — proxies Advisor questions to Claude;
+netlify/functions/advisor.js  — proxies Advisor questions to Gemini (Groq as backup);
                                  this is the only place the API key exists
 ```
 
@@ -75,18 +75,33 @@ redeploys automatically on every push to `main`.
    `netlify/functions`) — no manual build settings needed.
 2. **Set the AI Advisor's environment variables** (Site configuration →
    Environment variables). The AI part of the Advisor stays switched off
-   until both required ones exist; everyday questions still work without it.
+   until `ADVISOR_ACCESS_CODE` and at least one provider key exist;
+   everyday questions work without it.
 
    | Variable | Required | Purpose |
    |---|---|---|
-   | `ANTHROPIC_API_KEY` | yes | Your Anthropic API key (server-side only) |
+   | `GEMINI_API_KEY` | recommended | Main AI. Free key from [Google AI Studio](https://aistudio.google.com/apikey) |
+   | `GROQ_API_KEY` | recommended | Backup AI, used when Gemini fails or is rate limited. Free key from [console.groq.com/keys](https://console.groq.com/keys) |
    | `ADVISOR_ACCESS_CODE` | yes | A long random string. The owner types it once in the Advisor tab; the function rejects every request without it |
-   | `ANTHROPIC_MODEL` | no | Model name, defaults to `claude-sonnet-4-6` |
+   | `GEMINI_MODEL` | no | Default `gemini-3.8-flash` |
+   | `GEMINI_FALLBACK_MODEL` | no | Default `gemini-3.5-flash-lite` (separate free quota) |
+   | `GROQ_MODEL` | no | Default `openai/gpt-oss-120b` |
+   | `GROQ_FALLBACK_MODEL` | no | Default `openai/gpt-oss-20b` |
    | `ADVISOR_DAILY_CAP` | no | Max AI answers per day (default 300) |
 
+   Order tried: Gemini main model → Gemini lite model → Groq 120b → Groq 20b.
+   Either provider alone also works. Free model lists change often (Groq
+   removed its Llama models from the free plan in August 2026); if the
+   Advisor starts falling back to offline answers, check the current free
+   models and update the model variables — no code change needed.
+
    The function also rate-limits per IP and refuses requests from other
-   websites. Those limits are in memory per serverless instance, so also set
-   a monthly spend limit in the Anthropic console.
+   websites. Those limits are in memory per serverless instance.
+
+   **Privacy:** free-tier Gemini content may be used by Google to improve its
+   products (outside the EEA, UK and Switzerland). The Advisor sends a
+   summary of the shop's numbers, including product and debtor names, so
+   consider that before using the free tier with real customer data.
 3. Deploy. The app is installable (Add to Home Screen) on both Android
    and iOS once served over HTTPS, which Netlify does by default.
 
@@ -96,7 +111,7 @@ If you want to test the `/.netlify/functions/advisor` route locally:
 
 ```bash
 npm install -g netlify-cli
-cp .env.example .env   # fill in ANTHROPIC_API_KEY and ADVISOR_ACCESS_CODE
+cp .env.example .env   # fill in GEMINI_API_KEY, GROQ_API_KEY and ADVISOR_ACCESS_CODE
 netlify dev
 ```
 
@@ -115,11 +130,11 @@ was mainly about two things:
   restocking, named products, named debtors, suppliers, payment-method
   splits, comparisons, and what-if scenarios — all answered instantly
   with zero network calls. If a question doesn't match any rule *and*
-  Claude is unreachable (offline, or the request fails), the Advisor
+  the AI is unreachable (offline, or the request fails), the Advisor
   falls back to a real data snapshot instead of a dead "couldn't
   answer" — see `offlineFallbackAnswer` in `advisorEngine.js`.
 - **API key safety.** The original demo called `api.anthropic.com`
-  directly from the browser, which is fine inside Claude's own artifact
+  directly from the browser, which is fine inside a sandbox
   sandbox but would leak a real API key if shipped as-is. The Advisor now
   calls a Netlify Function instead, and the key only ever lives in
   Netlify's environment variables.
