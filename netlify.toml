@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Single-page app: any path that isn't a real file or a function route
+# falls back to index.html so client-side tab routing works on refresh.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
