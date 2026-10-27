@@ -30,6 +30,8 @@ export default defineConfig({
         // not in cached network responses, so offline use doesn't depend on
         // Workbox at all — this only keeps the UI itself loadable offline.
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
+        // Handles taps on notifications (opens the app on the right tab).
+        importScripts: ["sw-notify.js"],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

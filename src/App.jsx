@@ -9,6 +9,7 @@ import { C, FONT_IMPORT } from "./lib/theme.js";
 import { storage, STORAGE_KEY } from "./lib/storage.js";
 import { computeReportDue } from "./lib/reports.js";
 import { applySale, applyVoid } from "./lib/sales.js";
+import { currentPermission, showAppNotification } from "./lib/notify.js";
 import { applyRestock } from "./lib/stock.js";
 import { activeSales } from "./lib/finance.js";
 import { newId } from "./lib/ids.js";
@@ -76,25 +77,35 @@ export default function App() {
   useEffect(() => {
     if (!user || user.role !== "admin") return;
     if (!reportSettings.notificationsEnabled) return;
-    if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
+    if (currentPermission() !== "granted") return;
 
     const { weeklyDue, monthlyDue } = computeReportDue(reportSettings);
 
+    // showAppNotification never throws (phones require the service-worker path);
+    // marked as sent first so a slow call can't fire twice.
     if (weeklyDue && !notifiedRef.current.weekly) {
-      const n = new Notification("Weekly report ready — ProfitMind", { body: "Your weekly business digest is ready to review and send." });
-      n.onclick = () => { window.focus(); setTab("reports"); n.close(); };
       notifiedRef.current.weekly = true;
+      showAppNotification("Weekly report ready — ProfitMind", { body: "Your weekly business digest is ready to review and send.", tag: "weekly-report", tab: "reports", onClick: () => setTab("reports") });
     }
     if (!weeklyDue) notifiedRef.current.weekly = false;
 
     if (monthlyDue && !notifiedRef.current.monthly) {
-      const n = new Notification("Monthly report ready — ProfitMind", { body: "Your monthly business digest is ready to review and send." });
-      n.onclick = () => { window.focus(); setTab("reports"); n.close(); };
       notifiedRef.current.monthly = true;
+      showAppNotification("Monthly report ready — ProfitMind", { body: "Your monthly business digest is ready to review and send.", tag: "monthly-report", tab: "reports", onClick: () => setTab("reports") });
     }
     if (!monthlyDue) notifiedRef.current.monthly = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, reportSettings, tick]);
+
+  // Tapping a notification (handled in the service worker) asks us to open a tab.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    const onMessage = (e) => {
+      if (e.data && e.data.type === "open-tab" && e.data.tab && user && user.role === "admin") setTab(e.data.tab);
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [user]);
 
   // Load any previously saved data for this device on first mount.
   useEffect(() => {

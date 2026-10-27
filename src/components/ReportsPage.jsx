@@ -6,6 +6,7 @@
 import { useState, useMemo } from "react";
 import { Bell, Printer, Send, AlertTriangle, Phone } from "lucide-react";
 import { C, ugx } from "../lib/theme.js";
+import { currentPermission, notificationsSupported, requestNotificationPermission, showAppNotification } from "../lib/notify.js";
 import { buildPeriodReport, sendDigestWhatsApp, printPeriodReport } from "../lib/reports.js";
 import { Card } from "./ui/primitives.jsx";
 
@@ -28,22 +29,32 @@ export default function ReportsPage({ products, sales, debtors, purchases, expen
   const [period, setPeriod] = useState("week");
   const [note, setNote] = useState("");
   const [phoneDraft, setPhoneDraft] = useState(settings.whatsappNumber || "");
-  const [notifPermission, setNotifPermission] = useState(
-    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported"
-  );
+  const [notifPermission, setNotifPermission] = useState(currentPermission());
 
   async function enableNotifications() {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      setNote("This browser doesn't support notifications — the in-app banner will still work.");
+    if (!notificationsSupported()) {
+      setNote("This browser doesn't support notifications — the in-app banner will still work. (On iPhone, add ProfitMind to your Home Screen first.)");
       return;
     }
-    const perm = await Notification.requestPermission();
-    setNotifPermission(perm);
-    setSettings((s) => ({ ...s, notificationsEnabled: perm === "granted" }));
+    const perm = await requestNotificationPermission();
+    setNotifPermission(currentPermission());
+    if (perm === "error") {
+      setSettings((s) => ({ ...s, notificationsEnabled: false }));
+      setNote("This browser couldn't ask for notification permission. The in-app banner will still work.");
+      return;
+    }
+    if (perm !== "granted") {
+      setSettings((s) => ({ ...s, notificationsEnabled: false }));
+      setNote("Notifications weren't allowed — you'll still see the in-app banner when you open ProfitMind.");
+      return;
+    }
+    // Prove it works now, instead of finding out on the next report day.
+    const shown = await showAppNotification("Notifications are on", { body: "ProfitMind will tell you when a weekly or monthly report is ready.", tag: "welcome", tab: "reports" });
+    setSettings((s) => ({ ...s, notificationsEnabled: shown }));
     setNote(
-      perm === "granted"
+      shown
         ? "Notifications enabled — you'll get one the moment a report is due, as long as this browser is running."
-        : "Notifications weren't allowed — you'll still see the in-app banner when you open ProfitMind."
+        : "Permission was given, but this device couldn't display a notification, so it's left off. The in-app banner will still work."
     );
   }
   function disableNotifications() {
